@@ -11,25 +11,25 @@ type Json struct {
 }
 
 type Number struct {
-	Token `tok:"number"`
+	Token SimpleToken `tok:"number"`
 }
 
 type String struct {
-	Token `tok:"string"`
+	Token SimpleToken `tok:"string"`
 }
 
 type Null struct {
-	Token `tok:",null"`
+	Token SimpleToken `tok:",null"`
 }
 
 type Bool struct {
-	Token `tok:"bool"`
+	Token SimpleToken `tok:"bool"`
 }
 
 type Array struct {
-	Open Token `tok:",["`
+	Open SimpleToken `tok:",["`
 	*ArrayBody
-	Close Token `tok:",]"`
+	Close SimpleToken `tok:",]"`
 }
 
 type ArrayBody struct {
@@ -38,14 +38,14 @@ type ArrayBody struct {
 }
 
 type ArrayItem struct {
-	Comma Token `tok:",,"`
+	Comma SimpleToken `tok:",,"`
 	Value Json
 }
 
 type Dict struct {
-	Open Token `tok:",{"`
+	Open SimpleToken `tok:",{"`
 	*DictBody
-	Close Token `tok:",}"`
+	Close SimpleToken `tok:",}"`
 }
 
 type DictBody struct {
@@ -55,11 +55,11 @@ type DictBody struct {
 
 type KeyValue struct {
 	Key   String
-	Colon Token `tok:",:"`
+	Colon SimpleToken `tok:",:"`
 	Value Json
 }
 
 type DictItem struct {
-	Comma Token `tok:",,"`
+	Comma SimpleToken `tok:",,"`
 	KeyValue
 }

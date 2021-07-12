@@ -1,27 +1,28 @@
 package grammar
 
 import (
+	"errors"
 	"reflect"
 	"testing"
 )
 
-func str(s string) Token {
+func str(s string) SimpleToken {
 	return SimpleToken{tokType: "string", tokValue: s}
 }
 
-func num(s string) Token {
+func num(s string) SimpleToken {
 	return SimpleToken{tokType: "number", tokValue: s}
 }
 
-func bl(s string) Token {
+func bl(s string) SimpleToken {
 	return SimpleToken{tokType: "bool", tokValue: s}
 }
 
-func null() Token {
+func null() SimpleToken {
 	return SimpleToken{tokType: "null", tokValue: "null"}
 }
 
-func op(s string) Token {
+func op(s string) SimpleToken {
 	return SimpleToken{tokType: "op", tokValue: s}
 }
 
@@ -38,7 +39,7 @@ func TestParse(t *testing.T) {
 		name    string
 		args    args
 		want    interface{}
-		wantErr bool
+		wantErr error
 	}{
 		{
 			name: "a string",
@@ -151,11 +152,23 @@ func TestParse(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "invalid",
+			args: args{
+				dest: new(Json),
+				t:    s(op("{"), op("]")),
+			},
+			wantErr: &ParseError{
+				Err:   errors.New("expected token of type string"),
+				Pos:   1,
+				Token: op("]"),
+			},
+		},
 		// TODO: Add test cases.
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := Parse(tt.args.dest, tt.args.t); (err != nil) != tt.wantErr {
+			if err := Parse(tt.args.dest, tt.args.t); !reflect.DeepEqual(tt.wantErr, err) {
 				t.Errorf("Parse() error = %v, wantErr %v", err, tt.wantErr)
 			}
 			if tt.want != nil && !reflect.DeepEqual(tt.want, tt.args.dest) {
