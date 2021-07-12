@@ -10,7 +10,8 @@ import (
 // should match exactly one of the fields
 type OneOf struct{}
 
-//
+// A Parser can parse a token stream to populate itself.  It must return an
+// error if it fails to do it.
 type Parser interface {
 	Parse(t TokenStream, opts ParseOptions) error
 }
@@ -31,7 +32,7 @@ type ParseOptions struct {
 	TokenValue string
 }
 
-func (opts ParseOptions) matchToken(tok Token) error {
+func (opts ParseOptions) MatchToken(tok Token) error {
 	if opts.TokenType != "" && opts.TokenType != tok.Type() {
 		return fmt.Errorf("expected token of type %s", opts.TokenType)
 	}
@@ -41,16 +42,17 @@ func (opts ParseOptions) matchToken(tok Token) error {
 	return nil
 }
 
+func optionsFromTagValue(v string) ParseOptions {
+	if i := strings.IndexByte(v, ','); i >= 0 {
+		return ParseOptions{
+			TokenType:  v[:i],
+			TokenValue: v[i+1:],
+		}
+	}
+	return ParseOptions{TokenType: v}
+}
+
 func Parse(dest interface{}, t TokenStream) (err error) {
-	// defer func() {
-	// 	if r := recover(); r != nil {
-	// 		var ok bool
-	// 		err, ok = r.(error)
-	// 		if !ok {
-	// 			err = errors.New("unknown error")
-	// 		}
-	// 	}
-	// }()
 	tp := reflect.TypeOf(dest)
 	if tp.Kind() != reflect.Ptr {
 		panic("Parse must be given a pointer")
@@ -80,29 +82,6 @@ func (p *parser) updateError(err error) {
 		p.errPos = errPos
 		p.err = err
 	}
-}
-
-type ParseError struct {
-	Err error
-	Token
-	Pos int
-}
-
-func (e *ParseError) Error() string {
-	return fmt.Sprintf("token #%d %s with value %q: %s", e.Pos, e.Token.Type(), e.Token.Value(), e.Err)
-}
-
-func (p *parser) error() error {
-	if p.err != nil {
-		p.tokenStream.Restore(p.errPos - 1)
-		tok := p.tokenStream.Next()
-		return &ParseError{
-			Err:   p.err,
-			Token: tok,
-			Pos:   p.errPos - 1,
-		}
-	}
-	return nil
 }
 
 func (p *parser) parse(tp reflect.Type, opts ParseOptions) reflect.Value {
@@ -140,7 +119,7 @@ func (p *parser) parse(tp reflect.Type, opts ParseOptions) reflect.Value {
 	}
 	for fieldIndex := firstFieldIndex; fieldIndex < numField; fieldIndex++ {
 		field := tp.Field(fieldIndex)
-		fieldOpts := parseTagValue(field.Tag.Get("tok"))
+		fieldOpts := optionsFromTagValue(field.Tag.Get("tok"))
 		switch field.Type.Kind() {
 		case reflect.Ptr:
 			// Optional field
@@ -191,12 +170,25 @@ func (p *parser) parse(tp reflect.Type, opts ParseOptions) reflect.Value {
 	return ptr
 }
 
-func parseTagValue(v string) ParseOptions {
-	if i := strings.IndexByte(v, ','); i >= 0 {
-		return ParseOptions{
-			TokenType:  v[:i],
-			TokenValue: v[i+1:],
+type ParseError struct {
+	Err error
+	Token
+	Pos int
+}
+
+func (e *ParseError) Error() string {
+	return fmt.Sprintf("token #%d %s with value %q: %s", e.Pos, e.Token.Type(), e.Token.Value(), e.Err)
+}
+
+func (p *parser) error() error {
+	if p.err != nil {
+		p.tokenStream.Restore(p.errPos - 1)
+		tok := p.tokenStream.Next()
+		return &ParseError{
+			Err:   p.err,
+			Token: tok,
+			Pos:   p.errPos - 1,
 		}
 	}
-	return ParseOptions{TokenType: v}
+	return nil
 }

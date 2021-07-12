@@ -1,39 +1,41 @@
-package grammar
+package json
 
 import (
 	"errors"
 	"reflect"
 	"testing"
+
+	"github.com/arnodel/grammar"
 )
 
-func str(s string) SimpleToken {
-	return SimpleToken{tokType: "string", tokValue: s}
+func str(s string) Token {
+	return Token{tokType: "string", tokValue: s}
 }
 
-func num(s string) SimpleToken {
-	return SimpleToken{tokType: "number", tokValue: s}
+func num(s string) Token {
+	return Token{tokType: "number", tokValue: s}
 }
 
-func bl(s string) SimpleToken {
-	return SimpleToken{tokType: "bool", tokValue: s}
+func bl(s string) Token {
+	return Token{tokType: "bool", tokValue: s}
 }
 
-func null() SimpleToken {
-	return SimpleToken{tokType: "null", tokValue: "null"}
+func null() Token {
+	return Token{tokType: "null", tokValue: "null"}
 }
 
-func op(s string) SimpleToken {
-	return SimpleToken{tokType: "op", tokValue: s}
+func op(s string) Token {
+	return Token{tokType: "op", tokValue: s}
 }
 
-func s(toks ...Token) *SliceTokenStream {
+func s(toks ...grammar.Token) *SliceTokenStream {
 	return &SliceTokenStream{tokens: toks}
 }
 
 func TestParse(t *testing.T) {
 	type args struct {
 		dest interface{}
-		t    TokenStream
+		t    grammar.TokenStream
 	}
 	tests := []struct {
 		name    string
@@ -48,7 +50,7 @@ func TestParse(t *testing.T) {
 				t:    s(str("hello")),
 			},
 			want: &Json{
-				String: &String{Token: str("hello")},
+				String: &String{str("hello")},
 			},
 		},
 		{
@@ -74,7 +76,7 @@ func TestParse(t *testing.T) {
 				Array: &Array{
 					Open: op("["),
 					ArrayBody: &ArrayBody{
-						First: Json{String: &String{Token: str("item")}},
+						First: Json{String: &String{str("item")}},
 					},
 					Close: op("]"),
 				},
@@ -90,7 +92,7 @@ func TestParse(t *testing.T) {
 				Array: &Array{
 					Open: op("["),
 					ArrayBody: &ArrayBody{
-						First: Json{String: &String{Token: str("item1")}},
+						First: Json{String: &String{str("item1")}},
 						Items: []ArrayItem{
 							{
 								Comma: op(","),
@@ -158,7 +160,7 @@ func TestParse(t *testing.T) {
 				dest: new(Json),
 				t:    s(op("{"), op("]")),
 			},
-			wantErr: &ParseError{
+			wantErr: &grammar.ParseError{
 				Err:   errors.New("expected token of type string"),
 				Pos:   1,
 				Token: op("]"),
@@ -168,7 +170,7 @@ func TestParse(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := Parse(tt.args.dest, tt.args.t); !reflect.DeepEqual(tt.wantErr, err) {
+			if err := grammar.Parse(tt.args.dest, tt.args.t); !reflect.DeepEqual(tt.wantErr, err) {
 				t.Errorf("Parse() error = %v, wantErr %v", err, tt.wantErr)
 			}
 			if tt.want != nil && !reflect.DeepEqual(tt.want, tt.args.dest) {
@@ -213,7 +215,7 @@ func TestParse2(t *testing.T) {
 				t.Fatalf("Error tokenising: %s", err)
 			}
 			dest := new(Json)
-			err = Parse(dest, stream)
+			err = grammar.Parse(dest, stream)
 			if err != nil {
 				t.Fatalf("Error parsing: %s", err)
 			}
