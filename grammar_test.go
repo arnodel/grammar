@@ -177,3 +177,50 @@ func TestParse(t *testing.T) {
 		})
 	}
 }
+
+func TestParse2(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want interface{}
+	}{
+		{
+			name: "simple dict",
+			in:   `{"x": 2, "y": "abc"}`,
+			want: map[string]interface{}{
+				"x": 2.0,
+				"y": "abc",
+			},
+		},
+		{
+			name: "nested data",
+			in:   `[1, "xyz", true, {"hello": ["a", "b", 42], "bye": null}]`,
+			want: []interface{}{
+				1.0,
+				"xyz",
+				true,
+				map[string]interface{}{
+					"hello": []interface{}{"a", "b", 42.0},
+					"bye":   nil,
+				},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stream, err := TokeniseJsonString(tt.in)
+			if err != nil {
+				t.Fatalf("Error tokenising: %s", err)
+			}
+			dest := new(Json)
+			err = Parse(dest, stream)
+			if err != nil {
+				t.Fatalf("Error parsing: %s", err)
+			}
+			out := dest.Compile()
+			if !reflect.DeepEqual(out, tt.want) {
+				t.Errorf("out = %v, want = %v", out, tt.want)
+			}
+		})
+	}
+}
