@@ -17,6 +17,7 @@ type Json struct {
 
 // Number ::= <number token>
 type Number struct {
+	grammar.Rule
 	Value Token `tok:"number"` // This tells the parser that a token of type "number" should be used
 }
 

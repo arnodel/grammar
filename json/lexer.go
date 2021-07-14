@@ -25,10 +25,14 @@ func (t Token) Value() string {
 	return t.tokValue
 }
 
-func (t *Token) Parse(s grammar.TokenStream, opts grammar.ParseOptions) error {
+func (t *Token) Parse(s grammar.TokenStream, opts grammar.ParseOptions) *grammar.ParseError {
 	tok := s.Next()
 	if err := opts.MatchToken(tok); err != nil {
-		return err
+		return &grammar.ParseError{
+			Token: tok,
+			Err:   err,
+			Pos:   s.Save(),
+		}
 	}
 	t.tokType = tok.Type()
 	t.tokValue = tok.Value()

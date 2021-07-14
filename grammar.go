@@ -10,10 +10,12 @@ import (
 // should match exactly one of the fields
 type OneOf struct{}
 
+type Rule struct{}
+
 // A Parser can parse a token stream to populate itself.  It must return an
 // error if it fails to do it.
 type Parser interface {
-	Parse(t TokenStream, opts ParseOptions) error
+	Parse(t TokenStream, opts ParseOptions) *ParseError
 }
 
 type Token interface {
@@ -52,122 +54,92 @@ func optionsFromTagValue(v string) ParseOptions {
 	return ParseOptions{TokenType: v}
 }
 
-func Parse(dest interface{}, t TokenStream) (err error) {
-	tp := reflect.TypeOf(dest)
-	if tp.Kind() != reflect.Ptr {
-		panic("Parse must be given a pointer")
-	}
-	p := parser{tokenStream: t}
-	v := p.parse(tp.Elem(), ParseOptions{})
-	if !v.IsValid() {
-		return p.error()
-	}
-	reflect.ValueOf(dest).Elem().Set(v.Elem())
-	return nil
+func Parse(dest interface{}, s TokenStream) *ParseError {
+	return ParseWithOptions(dest, s, ParseOptions{})
 }
 
-type parser struct {
-	tokenStream TokenStream
-
-	errPos int
-	err    error
+func ParseWithOptions(dest interface{}, s TokenStream, opts ParseOptions) *ParseError {
+	if parser, ok := dest.(Parser); ok {
+		return parser.Parse(s, opts)
+	}
+	return parse(dest, s, opts)
 }
 
-func (p *parser) updateError(err error) {
-	if err == nil {
-		return
+func parse(dest interface{}, s TokenStream, opts ParseOptions) *ParseError {
+	destV := reflect.ValueOf(dest)
+	if destV.Kind() != reflect.Ptr {
+		panic("dest must be a pointer")
 	}
-	errPos := p.tokenStream.Save()
-	if errPos > p.errPos {
-		p.errPos = errPos
-		p.err = err
-	}
-}
-
-func (p *parser) parse(tp reflect.Type, opts ParseOptions) reflect.Value {
-	parserTp := reflect.TypeOf((*Parser)(nil)).Elem()
-
-	ptr := reflect.New(tp)
-	t := p.tokenStream
-	start := t.Save()
-
-	if ptr.Type().Implements(parserTp) {
-		err := ptr.Interface().(Parser).Parse(t, opts)
-		if err != nil {
-			p.updateError(err)
-			t.Restore(start)
-			return reflect.Value{}
-		}
-		return ptr
-	}
-
-	// If the type doesn't implement Parser, it should be a struct.
+	elem := destV.Elem()
+	tp := elem.Type()
 	if tp.Kind() != reflect.Struct {
-		panic("must be a struct")
+		panic("dest must point to a struct")
 	}
-
-	elem := ptr.Elem()
-
 	numField := tp.NumField()
 	if numField == 0 {
-		return ptr
+		return nil
 	}
 	firstFieldIndex := 0
 	oneOf := tp.Field(0).Type == reflect.TypeOf(OneOf{})
 	if oneOf {
 		firstFieldIndex++
 	}
+	rule := tp.Field(0).Type == reflect.TypeOf(Rule{})
+	if rule {
+		firstFieldIndex++
+	}
+	var err, fieldErr *ParseError
 	for fieldIndex := firstFieldIndex; fieldIndex < numField; fieldIndex++ {
 		field := tp.Field(fieldIndex)
 		fieldOpts := optionsFromTagValue(field.Tag.Get("tok"))
 		switch field.Type.Kind() {
 		case reflect.Ptr:
 			// Optional field
-			startOpt := t.Save()
-			v := p.parse(field.Type.Elem(), fieldOpts)
-			if v.IsValid() {
-				elem.Field(fieldIndex).Set(v)
+			startOpt := s.Save()
+			fieldVal := reflect.New(field.Type.Elem())
+			if fieldErr = ParseWithOptions(fieldVal.Interface(), s, fieldOpts); fieldErr != nil {
+				s.Restore(startOpt)
 				if oneOf {
-					return ptr
+					err = err.Merge(fieldErr)
 				}
 			} else {
-				t.Restore(startOpt)
+				elem.Field(fieldIndex).Set(fieldVal)
+				if oneOf {
+					return nil
+				}
 			}
 		case reflect.Slice:
 			// Repeated field
 			vs := reflect.Zero(field.Type)
 			for {
-				startOpt := t.Save()
-				v := p.parse(field.Type.Elem(), fieldOpts)
-				if v.IsValid() {
-					vs = reflect.Append(vs, v.Elem())
-				} else {
-					t.Restore(startOpt)
+				startOpt := s.Save()
+				fieldVal := reflect.New(field.Type.Elem())
+				if fieldErr = ParseWithOptions(fieldVal.Interface(), s, fieldOpts); fieldErr != nil {
+					s.Restore(startOpt)
 					break
 				}
+				vs = reflect.Append(vs, fieldVal.Elem())
 			}
 			elem.Field(fieldIndex).Set(vs)
 			if oneOf && vs.Len() > 0 {
-				return ptr
+				return nil
+			}
+			if oneOf {
+				err = err.Merge(fieldErr)
 			}
 		default:
 			// Compulsory field
 			if oneOf {
 				panic("oneOf fields must be pointers or slices")
 			}
-			v := p.parse(field.Type, fieldOpts)
-			if v.IsValid() {
-				elem.Field(fieldIndex).Set(v.Elem())
-			} else {
-				t.Restore(start)
-				return reflect.Value{}
+			fieldVal := reflect.New(field.Type)
+			if fieldErr = ParseWithOptions(fieldVal.Interface(), s, fieldOpts); fieldErr != nil {
+				return fieldErr
 			}
+			elem.Field(fieldIndex).Set(fieldVal.Elem())
 		}
 	}
-	if oneOf {
-		return reflect.Value{}
-	}
-	return ptr
+	return err
 }
 
 type ParseError struct {
@@ -180,15 +152,15 @@ func (e *ParseError) Error() string {
 	return fmt.Sprintf("token #%d %s with value %q: %s", e.Pos, e.Token.Type(), e.Token.Value(), e.Err)
 }
 
-func (p *parser) error() error {
-	if p.err != nil {
-		p.tokenStream.Restore(p.errPos - 1)
-		tok := p.tokenStream.Next()
-		return &ParseError{
-			Err:   p.err,
-			Token: tok,
-			Pos:   p.errPos - 1,
-		}
+func (e *ParseError) Merge(e2 *ParseError) *ParseError {
+	if e == nil {
+		return e2
 	}
-	return nil
+	if e2 == nil {
+		return e
+	}
+	if e.Pos >= e2.Pos {
+		return e
+	}
+	return e2
 }

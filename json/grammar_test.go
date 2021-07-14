@@ -41,7 +41,7 @@ func TestParse(t *testing.T) {
 		name    string
 		args    args
 		want    interface{}
-		wantErr error
+		wantErr *grammar.ParseError
 	}{
 		{
 			name: "a string",
@@ -145,7 +145,7 @@ func TestParse(t *testing.T) {
 								KeyValue: KeyValue{
 									Key:   String{str("key2")},
 									Colon: op(":"),
-									Value: Json{Number: &Number{num("123")}},
+									Value: Json{Number: &Number{Value: num("123")}},
 								},
 							},
 						},
@@ -161,8 +161,8 @@ func TestParse(t *testing.T) {
 				t:    s(op("{"), op("]")),
 			},
 			wantErr: &grammar.ParseError{
-				Err:   errors.New("expected token of type string"),
-				Pos:   1,
+				Err:   errors.New(`expected token with value "}"`),
+				Pos:   2,
 				Token: op("]"),
 			},
 		},
@@ -215,8 +215,8 @@ func TestParse2(t *testing.T) {
 				t.Fatalf("Error tokenising: %s", err)
 			}
 			dest := new(Json)
-			err = grammar.Parse(dest, stream)
-			if err != nil {
+			parseErr := grammar.Parse(dest, stream)
+			if parseErr != nil {
 				t.Fatalf("Error parsing: %s", err)
 			}
 			out := dest.Compile()
