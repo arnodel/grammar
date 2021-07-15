@@ -50,7 +50,7 @@ func TestParse(t *testing.T) {
 				t:    s(str("hello")),
 			},
 			want: &Json{
-				String: &String{str("hello")},
+				String: &String{Value: str("hello")},
 			},
 		},
 		{
@@ -76,7 +76,7 @@ func TestParse(t *testing.T) {
 				Array: &Array{
 					Open: op("["),
 					ArrayBody: &ArrayBody{
-						First: Json{String: &String{str("item")}},
+						First: Json{String: &String{Value: str("item")}},
 					},
 					Close: op("]"),
 				},
@@ -92,11 +92,11 @@ func TestParse(t *testing.T) {
 				Array: &Array{
 					Open: op("["),
 					ArrayBody: &ArrayBody{
-						First: Json{String: &String{str("item1")}},
+						First: Json{String: &String{Value: str("item1")}},
 						Items: []ArrayItem{
 							{
 								Comma: op(","),
-								Value: Json{String: &String{str("item2")}},
+								Value: Json{String: &String{Value: str("item2")}},
 							},
 						},
 					},
@@ -115,9 +115,9 @@ func TestParse(t *testing.T) {
 					Open: op("{"),
 					DictBody: &DictBody{
 						First: KeyValue{
-							Key:   String{str("key1")},
+							Key:   String{Value: str("key1")},
 							Colon: op(":"),
-							Value: Json{String: &String{str("val1")}},
+							Value: Json{String: &String{Value: str("val1")}},
 						},
 					},
 					Close: op("}"),
@@ -135,15 +135,15 @@ func TestParse(t *testing.T) {
 					Open: op("{"),
 					DictBody: &DictBody{
 						First: KeyValue{
-							Key:   String{str("key1")},
+							Key:   String{Value: str("key1")},
 							Colon: op(":"),
-							Value: Json{String: &String{str("val1")}},
+							Value: Json{String: &String{Value: str("val1")}},
 						},
 						Items: []DictItem{
 							{
 								Comma: op(","),
 								KeyValue: KeyValue{
-									Key:   String{str("key2")},
+									Key:   String{Value: str("key2")},
 									Colon: op(":"),
 									Value: Json{Number: &Number{Value: num("123")}},
 								},
@@ -166,7 +166,6 @@ func TestParse(t *testing.T) {
 				Token: op("]"),
 			},
 		},
-		// TODO: Add test cases.
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
