@@ -6,24 +6,37 @@ import (
 	"strings"
 )
 
+// SimpleToken is a simple implementation of the both the Token and the Parser
+// interfaces.  So it can be used in rules to match a token field.  It is also
+// the concrete type of Tokens returned by SimpleTokenStream.
 type SimpleToken struct {
 	tokType  string
 	tokValue string
 }
 
+var _ Token = SimpleToken{}
+
+// EOF is the token that is returned when trying to consument an exhausted token
+// stream.
 var EOF = SimpleToken{
 	tokType:  "EOF",
 	tokValue: "EOF",
 }
 
+// Type returns the token type.
 func (t SimpleToken) Type() string {
 	return t.tokType
 }
 
+// Value returns the value of the token.
 func (t SimpleToken) Value() string {
 	return t.tokValue
 }
 
+// Parse tries to match the next token in the given TokenStream with the
+// ParseOptions, using opts.MatchToken.  If they match, the receiver is loaded
+// with the token data, if not a non-nil *ParseError is returned.  In any event
+// the next token in the token stream has been consumed.
 func (t *SimpleToken) Parse(s TokenStream, opts ParseOptions) *ParseError {
 	tok := s.Next()
 	if err := opts.MatchToken(tok); err != nil {
@@ -38,11 +51,17 @@ func (t *SimpleToken) Parse(s TokenStream, opts ParseOptions) *ParseError {
 	return nil
 }
 
+// SimpleTokenStream is a very simple implementation of the TokenStream
+// interface which the Parse function requires.
 type SimpleTokenStream struct {
 	tokens     []Token
 	currentPos int
 }
 
+var _ TokenStream = (*SimpleTokenStream)(nil)
+
+// Next consumes the next token in the token stream and returns it.  If the
+// stream is exhausted, EOF is returned.
 func (s *SimpleTokenStream) Next() Token {
 	if s.currentPos >= len(s.tokens) {
 		return EOF
@@ -52,19 +71,27 @@ func (s *SimpleTokenStream) Next() Token {
 	return tok
 }
 
+// Save returns the current position in the token stream.
 func (s *SimpleTokenStream) Save() int {
 	return s.currentPos
 }
 
+// Restore rewinds the token stream to the given position (which should have
+// been obtained by s.Save()).  In general this may panic - in this
+// implementation it's always possible to rewind.
 func (s *SimpleTokenStream) Restore(pos int) {
 	s.currentPos = pos
 }
 
+// A TokenDef defines a type of token and the pattern that matches it.  Used by
+// SimpleTokeniser to create tokenisers simply.
 type TokenDef struct {
-	Ptn  string
-	Name string
+	Ptn  string // The regular expression the token should match
+	Name string // The name given to this token type
 }
 
+// SimpleTokeniser takes a list of TokenDefs and returns a function that can
+// tokenise a string.  Designed for simple use-cases.
 func SimpleTokeniser(tokenDefs []TokenDef) func(string) (*SimpleTokenStream, error) {
 	ptns := make([]string, len(tokenDefs))
 	for i, tokenDef := range tokenDefs {
