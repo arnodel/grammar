@@ -106,7 +106,7 @@ SExpr {
 }
 ```
 
-# Generating a parser
+## Generating a parser
 
 The above works using reflection, which is fine but can be a little slow if you
 are parsing very big files.  It is also possible to compile a parser.
