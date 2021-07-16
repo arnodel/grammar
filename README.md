@@ -12,17 +12,17 @@ Rules can be written as Go structs.  Here is a definition for s-exprs:
 // SExpr ::= Number | String | Atom | List
 type SExpr struct {
     
-    grammar.OneOf                // This means this rule is a "one-of" rule, one of the rules below has to match
-    Number *Token `tok:"number"` // A pointer field means an optional match (all one-of field should be optional)
+    grammar.OneOf                // This rule is a "one-of": one of the rules below has to match
+    Number *Token `tok:"number"` // A pointer field means an optional match
     String *Token `tok:"string"` // This "tok" tag means only tokens of type "string" will match
     Atom   *Token `tok:"atom"`
-    *List
+    *List                        // All field in a one-of rule must be optional
 }
 
 // List ::= "(" [Item] ")"
 type List struct {
-    grammar.Rule            // This means it is a Sequence rule, all fields must match in a sequence
-    OpenBkt  `tok:"bkt,("`  // This "tok" tag means only tokens of type "bkt" with value "(" will match
+    grammar.Rule            // This is a Sequence rule, all fields must match in a sequence
+    OpenBkt  `tok:"bkt,("`  // This "tok" tag means only "bkt" tokens with value "(" will match
     Items []SExpr
     CloseBkt `tok:"bkt,)`
 }
