@@ -55,16 +55,17 @@ func main() {
 	}
 	ruleTypes := getRuleTypes(astFile.Scope.Objects)
 
-	// Generate the Parse method for the identified rules
-	log.Printf("Compiling %s", srcFile)
-	var compiledBuf bytes.Buffer
-	fmt.Fprintf(&compiledBuf, fileHeader, srcFile, astFile.Name)
-
+	// Sort the rule names so that the output is stable
 	sortedNames := make([]string, 0, len(ruleTypes))
 	for name := range ruleTypes {
 		sortedNames = append(sortedNames, name)
 	}
 	sort.Strings(sortedNames)
+
+	// Generate the Parse method for the identified rules
+	log.Printf("Compiling %s", srcFile)
+	var compiledBuf bytes.Buffer
+	fmt.Fprintf(&compiledBuf, fileHeader, srcFile, astFile.Name)
 	for _, name := range sortedNames {
 		structType := ruleTypes[name]
 		rule := getRule(name, structType, func(name string) bool {
