@@ -7,32 +7,46 @@ package json
 import "github.com/arnodel/grammar"
 
 // Parse implements parses the given token stream into the receiver according to
-// the rule defined by DictItem.
-func (r *DictItem) Parse(s grammar.TokenStream, opts grammar.ParseOptions) (err *grammar.ParseError) {
+// the rule defined by Array.
+func (r *Array) Parse(s grammar.TokenStream, opts grammar.ParseOptions) (err *grammar.ParseError) {
 	// This is a sequence rule.
 	{
 		opts = grammar.ParseOptions{
 			TokenType:  "op",
-			TokenValue: ",",
+			TokenValue: "[",
 		}
 		// Parse Token.
 		var dest Token
 		if fieldErr := grammar.ParseWithOptions(&dest, s, opts); fieldErr != nil {
 			return fieldErr
 		}
-		r.Comma = dest
+		r.Open = dest
 	}
 	{
 		opts = grammar.ParseOptions{
 			TokenType:  "",
 			TokenValue: "",
 		}
-		// Parse KeyValue.
-		var dest KeyValue
+		// Parse optional ArrayBody.
+		startOpt := s.Save()
+		var dest ArrayBody
 		if fieldErr := dest.Parse(s, opts); fieldErr != nil {
+			s.Restore(startOpt)
+		} else {
+			r.ArrayBody = &dest
+		}
+	}
+	{
+		opts = grammar.ParseOptions{
+			TokenType:  "op",
+			TokenValue: "]",
+		}
+		// Parse Token.
+		var dest Token
+		if fieldErr := grammar.ParseWithOptions(&dest, s, opts); fieldErr != nil {
 			return fieldErr
 		}
-		r.KeyValue = dest
+		r.Close = dest
 	}
 	return nil
 }
@@ -75,32 +89,20 @@ func (r *ArrayBody) Parse(s grammar.TokenStream, opts grammar.ParseOptions) (err
 }
 
 // Parse implements parses the given token stream into the receiver according to
-// the rule defined by KeyValue.
-func (r *KeyValue) Parse(s grammar.TokenStream, opts grammar.ParseOptions) (err *grammar.ParseError) {
+// the rule defined by ArrayItem.
+func (r *ArrayItem) Parse(s grammar.TokenStream, opts grammar.ParseOptions) (err *grammar.ParseError) {
 	// This is a sequence rule.
 	{
 		opts = grammar.ParseOptions{
-			TokenType:  "",
-			TokenValue: "",
-		}
-		// Parse String.
-		var dest String
-		if fieldErr := dest.Parse(s, opts); fieldErr != nil {
-			return fieldErr
-		}
-		r.Key = dest
-	}
-	{
-		opts = grammar.ParseOptions{
 			TokenType:  "op",
-			TokenValue: ":",
+			TokenValue: ",",
 		}
 		// Parse Token.
 		var dest Token
 		if fieldErr := grammar.ParseWithOptions(&dest, s, opts); fieldErr != nil {
 			return fieldErr
 		}
-		r.Colon = dest
+		r.Comma = dest
 	}
 	{
 		opts = grammar.ParseOptions{
@@ -132,81 +134,6 @@ func (r *Bool) Parse(s grammar.TokenStream, opts grammar.ParseOptions) (err *gra
 			return fieldErr
 		}
 		r.Value = dest
-	}
-	return nil
-}
-
-// Parse implements parses the given token stream into the receiver according to
-// the rule defined by Number.
-func (r *Number) Parse(s grammar.TokenStream, opts grammar.ParseOptions) (err *grammar.ParseError) {
-	// This is a sequence rule.
-	{
-		opts = grammar.ParseOptions{
-			TokenType:  "number",
-			TokenValue: "",
-		}
-		// Parse Token.
-		var dest Token
-		if fieldErr := grammar.ParseWithOptions(&dest, s, opts); fieldErr != nil {
-			return fieldErr
-		}
-		r.Value = dest
-	}
-	return nil
-}
-
-// Parse implements parses the given token stream into the receiver according to
-// the rule defined by String.
-func (r *String) Parse(s grammar.TokenStream, opts grammar.ParseOptions) (err *grammar.ParseError) {
-	// This is a sequence rule.
-	{
-		opts = grammar.ParseOptions{
-			TokenType:  "string",
-			TokenValue: "",
-		}
-		// Parse Token.
-		var dest Token
-		if fieldErr := grammar.ParseWithOptions(&dest, s, opts); fieldErr != nil {
-			return fieldErr
-		}
-		r.Value = dest
-	}
-	return nil
-}
-
-// Parse implements parses the given token stream into the receiver according to
-// the rule defined by DictBody.
-func (r *DictBody) Parse(s grammar.TokenStream, opts grammar.ParseOptions) (err *grammar.ParseError) {
-	// This is a sequence rule.
-	{
-		opts = grammar.ParseOptions{
-			TokenType:  "",
-			TokenValue: "",
-		}
-		// Parse KeyValue.
-		var dest KeyValue
-		if fieldErr := dest.Parse(s, opts); fieldErr != nil {
-			return fieldErr
-		}
-		r.First = dest
-	}
-	{
-		opts = grammar.ParseOptions{
-			TokenType:  "",
-			TokenValue: "",
-		}
-		// Parse optional sequence of DictItem items.
-		var dests []DictItem
-		for {
-			startOpt := s.Save()
-			var dest DictItem
-			if fieldErr := dest.Parse(s, opts); fieldErr != nil {
-				s.Restore(startOpt)
-				break
-			}
-			dests = append(dests, dest)
-		}
-		r.Items = dests
 	}
 	return nil
 }
@@ -252,6 +179,74 @@ func (r *Dict) Parse(s grammar.TokenStream, opts grammar.ParseOptions) (err *gra
 			return fieldErr
 		}
 		r.Close = dest
+	}
+	return nil
+}
+
+// Parse implements parses the given token stream into the receiver according to
+// the rule defined by DictBody.
+func (r *DictBody) Parse(s grammar.TokenStream, opts grammar.ParseOptions) (err *grammar.ParseError) {
+	// This is a sequence rule.
+	{
+		opts = grammar.ParseOptions{
+			TokenType:  "",
+			TokenValue: "",
+		}
+		// Parse KeyValue.
+		var dest KeyValue
+		if fieldErr := dest.Parse(s, opts); fieldErr != nil {
+			return fieldErr
+		}
+		r.First = dest
+	}
+	{
+		opts = grammar.ParseOptions{
+			TokenType:  "",
+			TokenValue: "",
+		}
+		// Parse optional sequence of DictItem items.
+		var dests []DictItem
+		for {
+			startOpt := s.Save()
+			var dest DictItem
+			if fieldErr := dest.Parse(s, opts); fieldErr != nil {
+				s.Restore(startOpt)
+				break
+			}
+			dests = append(dests, dest)
+		}
+		r.Items = dests
+	}
+	return nil
+}
+
+// Parse implements parses the given token stream into the receiver according to
+// the rule defined by DictItem.
+func (r *DictItem) Parse(s grammar.TokenStream, opts grammar.ParseOptions) (err *grammar.ParseError) {
+	// This is a sequence rule.
+	{
+		opts = grammar.ParseOptions{
+			TokenType:  "op",
+			TokenValue: ",",
+		}
+		// Parse Token.
+		var dest Token
+		if fieldErr := grammar.ParseWithOptions(&dest, s, opts); fieldErr != nil {
+			return fieldErr
+		}
+		r.Comma = dest
+	}
+	{
+		opts = grammar.ParseOptions{
+			TokenType:  "",
+			TokenValue: "",
+		}
+		// Parse KeyValue.
+		var dest KeyValue
+		if fieldErr := dest.Parse(s, opts); fieldErr != nil {
+			return fieldErr
+		}
+		r.KeyValue = dest
 	}
 	return nil
 }
@@ -360,6 +355,49 @@ func (r *Json) Parse(s grammar.TokenStream, opts grammar.ParseOptions) (err *gra
 }
 
 // Parse implements parses the given token stream into the receiver according to
+// the rule defined by KeyValue.
+func (r *KeyValue) Parse(s grammar.TokenStream, opts grammar.ParseOptions) (err *grammar.ParseError) {
+	// This is a sequence rule.
+	{
+		opts = grammar.ParseOptions{
+			TokenType:  "",
+			TokenValue: "",
+		}
+		// Parse String.
+		var dest String
+		if fieldErr := dest.Parse(s, opts); fieldErr != nil {
+			return fieldErr
+		}
+		r.Key = dest
+	}
+	{
+		opts = grammar.ParseOptions{
+			TokenType:  "op",
+			TokenValue: ":",
+		}
+		// Parse Token.
+		var dest Token
+		if fieldErr := grammar.ParseWithOptions(&dest, s, opts); fieldErr != nil {
+			return fieldErr
+		}
+		r.Colon = dest
+	}
+	{
+		opts = grammar.ParseOptions{
+			TokenType:  "",
+			TokenValue: "",
+		}
+		// Parse Json.
+		var dest Json
+		if fieldErr := dest.Parse(s, opts); fieldErr != nil {
+			return fieldErr
+		}
+		r.Value = dest
+	}
+	return nil
+}
+
+// Parse implements parses the given token stream into the receiver according to
 // the rule defined by Null.
 func (r *Null) Parse(s grammar.TokenStream, opts grammar.ParseOptions) (err *grammar.ParseError) {
 	// This is a sequence rule.
@@ -379,74 +417,36 @@ func (r *Null) Parse(s grammar.TokenStream, opts grammar.ParseOptions) (err *gra
 }
 
 // Parse implements parses the given token stream into the receiver according to
-// the rule defined by Array.
-func (r *Array) Parse(s grammar.TokenStream, opts grammar.ParseOptions) (err *grammar.ParseError) {
+// the rule defined by Number.
+func (r *Number) Parse(s grammar.TokenStream, opts grammar.ParseOptions) (err *grammar.ParseError) {
 	// This is a sequence rule.
 	{
 		opts = grammar.ParseOptions{
-			TokenType:  "op",
-			TokenValue: "[",
-		}
-		// Parse Token.
-		var dest Token
-		if fieldErr := grammar.ParseWithOptions(&dest, s, opts); fieldErr != nil {
-			return fieldErr
-		}
-		r.Open = dest
-	}
-	{
-		opts = grammar.ParseOptions{
-			TokenType:  "",
+			TokenType:  "number",
 			TokenValue: "",
 		}
-		// Parse optional ArrayBody.
-		startOpt := s.Save()
-		var dest ArrayBody
-		if fieldErr := dest.Parse(s, opts); fieldErr != nil {
-			s.Restore(startOpt)
-		} else {
-			r.ArrayBody = &dest
-		}
-	}
-	{
-		opts = grammar.ParseOptions{
-			TokenType:  "op",
-			TokenValue: "]",
-		}
 		// Parse Token.
 		var dest Token
 		if fieldErr := grammar.ParseWithOptions(&dest, s, opts); fieldErr != nil {
 			return fieldErr
 		}
-		r.Close = dest
+		r.Value = dest
 	}
 	return nil
 }
 
 // Parse implements parses the given token stream into the receiver according to
-// the rule defined by ArrayItem.
-func (r *ArrayItem) Parse(s grammar.TokenStream, opts grammar.ParseOptions) (err *grammar.ParseError) {
+// the rule defined by String.
+func (r *String) Parse(s grammar.TokenStream, opts grammar.ParseOptions) (err *grammar.ParseError) {
 	// This is a sequence rule.
 	{
 		opts = grammar.ParseOptions{
-			TokenType:  "op",
-			TokenValue: ",",
+			TokenType:  "string",
+			TokenValue: "",
 		}
 		// Parse Token.
 		var dest Token
 		if fieldErr := grammar.ParseWithOptions(&dest, s, opts); fieldErr != nil {
-			return fieldErr
-		}
-		r.Comma = dest
-	}
-	{
-		opts = grammar.ParseOptions{
-			TokenType:  "",
-			TokenValue: "",
-		}
-		// Parse Json.
-		var dest Json
-		if fieldErr := dest.Parse(s, opts); fieldErr != nil {
 			return fieldErr
 		}
 		r.Value = dest
