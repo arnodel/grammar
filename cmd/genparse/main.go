@@ -189,9 +189,9 @@ func (r *{{ .Name }}) Parse(s grammar.TokenStream, opts grammar.ParseOptions) (e
 		err = err.Merge(fieldErr)
 		{{- else if .FieldType.Array }}
 		// Parse sequence of {{ .FieldType.Name }} items.
-		startOpt := s.Save()
 		var dests []{{ .FieldType.Name}}
 		for {
+			startOpt := s.Save()
 			var dest {{ .FieldType.Name }}
 			if fieldErr := {{ template "parseDest" . }}; fieldErr != nil {
 				s.Restore(startOpt)

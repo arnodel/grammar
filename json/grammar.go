@@ -4,6 +4,8 @@ import (
 	"github.com/arnodel/grammar"
 )
 
+//go:generate genparse
+
 // Json ::= Number | String | Null | Bool | Array | Dict
 type Json struct {
 	grammar.OneOf // This tells the parser exactly one of the fields below should be populated
