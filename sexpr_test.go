@@ -17,7 +17,7 @@ type SExpr struct {
 }
 
 type List struct {
-	grammar.Rule
+	grammar.Seq
 	OpenBkt  Token `tok:"bkt,("`
 	Items    []SExpr
 	CloseBkt Token `tok:"bkt,)"`

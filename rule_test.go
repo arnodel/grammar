@@ -20,7 +20,7 @@ func Test_calcRuleDef(t *testing.T) {
 	}
 
 	type SeqRule struct {
-		Rule
+		Seq
 		A Rule1
 		B []Rule2
 	}

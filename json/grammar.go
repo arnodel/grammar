@@ -19,31 +19,31 @@ type Json struct {
 
 // Number ::= <number token>
 type Number struct {
-	grammar.Rule
+	grammar.Seq
 	Value Token `tok:"number"` // This tells the parser that a token of type "number" should be used
 }
 
 // String ::= <string token>
 type String struct {
-	grammar.Rule
+	grammar.Seq
 	Value Token `tok:"string"`
 }
 
 // Null ::= "null"
 type Null struct {
-	grammar.Rule
+	grammar.Seq
 	Value Token `tok:"null,null"`
 }
 
 // Bool ::= <bool token>
 type Bool struct {
-	grammar.Rule
+	grammar.Seq
 	Value Token `tok:"bool"`
 }
 
 // Array ::= "[" [ArrayBody] "]"
 type Array struct {
-	grammar.Rule
+	grammar.Seq
 	Open       Token `tok:"op,["` // This tells the parser a token of type "op" with value "[" should be used
 	*ArrayBody       // A pointer field is optional
 	Close      Token `tok:"op,]"`
@@ -51,20 +51,20 @@ type Array struct {
 
 // ArrayBody ::= Json ("," Json)*
 type ArrayBody struct {
-	grammar.Rule
+	grammar.Seq
 	First Json // A non-pointer field is compulsory
 	Items []ArrayItem
 }
 
 type ArrayItem struct {
-	grammar.Rule
+	grammar.Seq
 	Comma Token `tok:"op,,"`
 	Value Json
 }
 
 // Dict ::= "{" [DictBody] "}"
 type Dict struct {
-	grammar.Rule
+	grammar.Seq
 	Open Token `tok:"op,{"`
 	*DictBody
 	Close Token `tok:"op,}"`
@@ -72,20 +72,20 @@ type Dict struct {
 
 // DictBody ::= String ":" Json ("," String : Json)*
 type DictBody struct {
-	grammar.Rule
+	grammar.Seq
 	First KeyValue
 	Items []DictItem
 }
 
 type KeyValue struct {
-	grammar.Rule
+	grammar.Seq
 	Key   String
 	Colon Token `tok:"op,:"`
 	Value Json
 }
 
 type DictItem struct {
-	grammar.Rule
+	grammar.Seq
 	Comma Token `tok:"op,,"`
 	KeyValue
 }

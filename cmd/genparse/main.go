@@ -104,7 +104,7 @@ func getRuleTypes(objects map[string]*ast.Object) map[string]*ast.StructType {
 			continue
 		}
 		firstFieldTypeName := getName(structType.Fields.List[0].Type)
-		if firstFieldTypeName != "grammar.Rule" && firstFieldTypeName != "grammar.OneOf" {
+		if firstFieldTypeName != "grammar.Seq" && firstFieldTypeName != "grammar.OneOf" {
 			continue
 		}
 		ruleTypes[name] = structType
@@ -119,7 +119,7 @@ func getRule(typeName string, structType *ast.StructType, isRuleType func(string
 	fields := structType.Fields.List
 	firstFieldTypeName := getName(fields[0].Type)
 	isOneOf := firstFieldTypeName == "grammar.OneOf"
-	if isOneOf || firstFieldTypeName == "grammar.Rule" {
+	if isOneOf || firstFieldTypeName == "grammar.Seq" {
 		fields = fields[1:]
 	}
 	var ruleFields []RuleField

@@ -20,7 +20,7 @@ type SExpr struct {
 
 // List ::= "(" [Item] ")"
 type List struct {
-    grammar.Rule            // This is a Sequence rule, all fields must match in a sequence
+    grammar.Seq             // This is a Sequence rule, all fields must match in a sequence
     OpenBkt  `tok:"bkt,("`  // This "tok" tag means only "bkt" tokens with value "(" will match
     Items []SExpr
     CloseBkt `tok:"bkt,)`

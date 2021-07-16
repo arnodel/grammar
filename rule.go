@@ -11,7 +11,7 @@ import (
 // should match exactly one of the fields
 type OneOf struct{}
 
-type Rule struct{}
+type Seq struct{}
 
 type RuleDef struct {
 	Name   string
@@ -67,7 +67,7 @@ func calcRuleDef(tp reflect.Type) (*RuleDef, error) {
 	}
 	firstFieldIndex := 0
 	oneOf := tp.Field(0).Type == reflect.TypeOf(OneOf{})
-	rule := tp.Field(0).Type == reflect.TypeOf(Rule{})
+	rule := tp.Field(0).Type == reflect.TypeOf(Seq{})
 	if oneOf || rule {
 		firstFieldIndex++
 	} else {
