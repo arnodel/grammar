@@ -11,7 +11,6 @@ Rules can be written as Go structs.  Here is a definition for s-exprs:
 
 // SExpr ::= Number | String | Atom | List
 type SExpr struct {
-    
     grammar.OneOf                // This rule is a "one-of": one of the rules below has to match
     Number *Token `tok:"number"` // A pointer field means an optional match
     String *Token `tok:"string"` // This "tok" tag means only tokens of type "string" will match
@@ -139,4 +138,4 @@ package.  If your file is called say `grammar.go`, it will generated a file in
 the same package called `grammar.compiled.go`.  You can still parse files the
 same way as before using `grammar.Parse()` but this will no longer use
 reflection!  Note that you can always force reflection to be used by compiling your
-program with the `nocompiledparser` go compiler tag.
+program with the `nocompiledgrammar` go compiler tag.
