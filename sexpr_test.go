@@ -56,27 +56,31 @@ func Example() {
 	// SExpr {
 	//   List: List {
 	//     OpenBkt: {bkt (}
-	//     Items: SExpr {
-	//       Atom: {atom cons}
-	//     }
-	//     Items: SExpr {
-	//       Atom: {atom a}
-	//     }
-	//     Items: SExpr {
-	//       List: List {
-	//         OpenBkt: {bkt (}
-	//         Items: SExpr {
-	//           Atom: {atom list}
-	//         }
-	//         Items: SExpr {
-	//           Number: {number 123}
-	//         }
-	//         Items: SExpr {
-	//           String: {string "c"}
-	//         }
-	//         CloseBkt: {bkt )}
+	//     Items: [
+	//       SExpr {
+	//         Atom: {atom cons}
 	//       }
-	//     }
+	//       SExpr {
+	//         Atom: {atom a}
+	//       }
+	//       SExpr {
+	//         List: List {
+	//           OpenBkt: {bkt (}
+	//           Items: [
+	//             SExpr {
+	//               Atom: {atom list}
+	//             }
+	//             SExpr {
+	//               Number: {number 123}
+	//             }
+	//             SExpr {
+	//               String: {string "c"}
+	//             }
+	//           ]
+	//           CloseBkt: {bkt )}
+	//         }
+	//       }
+	//     ]
 	//     CloseBkt: {bkt )}
 	//   }
 	// }

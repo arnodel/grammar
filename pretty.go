@@ -29,8 +29,12 @@ func prettyWrite(out io.Writer, r interface{}, pfx string, indent int) (err erro
 				prettyWrite(out, fieldV.Elem().Interface(), ruleField.Name, indent+2)
 			}
 		case ruleField.Array:
-			for i := 0; i < fieldV.Len(); i++ {
-				prettyWrite(out, fieldV.Index(i).Interface(), ruleField.Name, indent+2)
+			if fieldV.Len() > 0 {
+				writeLine(out, ruleField.Name, indent+2, "[")
+				for i := 0; i < fieldV.Len(); i++ {
+					prettyWrite(out, fieldV.Index(i).Interface(), "", indent+4)
+				}
+				writeLine(out, "", indent+2, "]")
 			}
 		default:
 			prettyWrite(out, fieldV.Interface(), ruleField.Name, indent+2)
