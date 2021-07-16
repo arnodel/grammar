@@ -7,10 +7,12 @@ import (
 	"strings"
 )
 
-// OneOf can be used as the first field of a Rule struct to signify that it
+// OneOf should be used as the first field of a Rule struct to signify that it
 // should match exactly one of the fields
 type OneOf struct{}
 
+// Seq should be used as the first field of a Rule struct to signify that it
+// should match all the fields in sequence.
 type Seq struct{}
 
 type RuleDef struct {

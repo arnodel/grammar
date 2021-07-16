@@ -9,11 +9,14 @@ import (
 
 // PrettyWrite outputs a pretty representation of the rule r on the writer. For
 // a struct like this:
+//
 //     type RuleType struct {
 //         Field1 Rule1
 //         Field2 []Rule2
 //     }
+//
 // It looks like this:
+//
 //     RuleType {
 //       Field1: <pretty representation of the value of Field1>
 //       Field2: [
@@ -22,6 +25,7 @@ import (
 //          <...>
 //       ]
 //     }
+//
 // Empty optional fields and empty repeated fields are omitted altogether.
 func PrettyWrite(out io.Writer, r interface{}) error {
 	return prettyWrite(out, r, "", 0)
