@@ -42,7 +42,7 @@ In order to parse your s-exprs into the data structures aboves you also need a t
 var tokenise = grammar.SimpleTokeniser([]grammar.TokenDef{
     {
         // If Name is empty, the token is skipped in the token stream
-        Ptn: `\s+`
+        Ptn: `\s+` // This is a regular expression (must not contain groups)
     },
     {
         Name: "bkt", // This is the type of the token seen in the "tok" struct tag
@@ -69,7 +69,7 @@ Now putting all this together you can parse an s-expr of your choice:
 
 ```golang
 
-tokenStream, _ := tokenise(`(cons a (list b c)))`)
+tokenStream, _ := tokenise(`(cons a (list 123 "c")))`)
 var sexpr SExpr
 err := grammar.Parse(&sexpr, tokenStream)
 grammar.PrettyWrite(sexpr, os.Stdout, 0)
@@ -93,10 +93,10 @@ SExpr {
           Atom: {atom list}
         }
         Items: SExpr {
-          Atom: {atom b}
+          Number: {number 123}
         }
         Items: SExpr {
-          Atom: {atom c}
+          Stirng: {string "c"}
         }
         CloseBkt: {bkt )}
       }

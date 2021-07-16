@@ -47,7 +47,7 @@ var tokenise = grammar.SimpleTokeniser([]grammar.TokenDef{
 })
 
 func Example() {
-	tokenStream, _ := tokenise(`(cons a (list b c)))`)
+	tokenStream, _ := tokenise(`(cons a (list 123 "c")))`)
 	var sexpr SExpr
 	grammar.Parse(&sexpr, tokenStream)
 	grammar.PrettyWrite(os.Stdout, sexpr)
@@ -69,10 +69,10 @@ func Example() {
 	//           Atom: {atom list}
 	//         }
 	//         Items: SExpr {
-	//           Atom: {atom b}
+	//           Number: {number 123}
 	//         }
 	//         Items: SExpr {
-	//           Atom: {atom c}
+	//           String: {string "c"}
 	//         }
 	//         CloseBkt: {bkt )}
 	//       }
