@@ -72,10 +72,20 @@ Now putting all this together you can parse an s-expr of your choice:
 tokenStream, _ := tokenise(`(cons a (list 123 "c")))`)
 var sexpr SExpr
 err := grammar.Parse(&sexpr, tokenStream)
+```
+
+Now `sexpr`'s fields have been filled and you explore the syntax tree by
+traversing the fields in `sexpr`, e.g. `sexpr.List.Items` is now a slice of
+`SExprs`, `sexpr.List.Items[0].Atom` is a `Token` with Value `"cons"` (and type
+`atom`).
+
+There is a convenient function to output a rule struct:
+
+```golang
 grammar.PrettyWrite(sexpr, os.Stdout)
 ```
 
-This should output a pretty representation of `sexpr`:
+This will output a pretty representation of `sexpr`:
 ```
 SExpr {
   List: List {
