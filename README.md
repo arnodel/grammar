@@ -72,7 +72,7 @@ Now putting all this together you can parse an s-expr of your choice:
 tokenStream, _ := tokenise(`(cons a (list 123 "c")))`)
 var sexpr SExpr
 err := grammar.Parse(&sexpr, tokenStream)
-grammar.PrettyWrite(sexpr, os.Stdout, 0)
+grammar.PrettyWrite(sexpr, os.Stdout)
 ```
 
 This should output a pretty representation of `sexpr`:
