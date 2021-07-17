@@ -53,7 +53,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("Cannot parse file: %s", srcFile)
 	}
-	ruleTypes := getRuleTypes(astFile.Scope.Objects)
+	grammarPackageName := getGrammarPackageName(astFile)
+	if grammarPackageName == "" {
+		log.Fatalf("Package github.com/arnodel/grammar not imported")
+	}
+	ruleTypes := getRuleTypes(astFile.Scope.Objects, grammarPackageName)
 
 	// Sort the rule names so that the output is stable
 	sortedNames := make([]string, 0, len(ruleTypes))
@@ -68,7 +72,7 @@ func main() {
 	fmt.Fprintf(&compiledBuf, fileHeader, srcFile, astFile.Name)
 	for _, name := range sortedNames {
 		structType := ruleTypes[name]
-		rule := getRule(name, structType, func(name string) bool {
+		rule := getRule(name, structType, grammarPackageName, func(name string) bool {
 			return ruleTypes[name] != nil
 		})
 		log.Printf("...generating (*%s).Parse", name)
@@ -90,12 +94,26 @@ func main() {
 	}
 }
 
+func getGrammarPackageName(f *ast.File) string {
+	for _, importSpec := range f.Imports {
+		importPath, _ := strconv.Unquote(importSpec.Path.Value)
+		if importPath != "github.com/arnodel/grammar" {
+			continue
+		}
+		if importSpec.Name != nil {
+			return importSpec.Name.Name
+		}
+		return "grammar"
+	}
+	return ""
+}
+
 func getOutputPath(path string) string {
 	ext := filepath.Ext(path)
 	return fmt.Sprintf("%s.compiled%s", strings.TrimSuffix(path, ext), ext)
 }
 
-func getRuleTypes(objects map[string]*ast.Object) map[string]*ast.StructType {
+func getRuleTypes(objects map[string]*ast.Object, grammarPackageName string) map[string]*ast.StructType {
 	ruleTypes := map[string]*ast.StructType{}
 	for name, obj := range objects {
 		if obj.Kind != ast.Typ {
@@ -113,7 +131,7 @@ func getRuleTypes(objects map[string]*ast.Object) map[string]*ast.StructType {
 			continue
 		}
 		firstFieldTypeName := getName(structType.Fields.List[0].Type)
-		if firstFieldTypeName != "grammar.Seq" && firstFieldTypeName != "grammar.OneOf" {
+		if firstFieldTypeName != grammarPackageName+".Seq" && firstFieldTypeName != grammarPackageName+".OneOf" {
 			continue
 		}
 		ruleTypes[name] = structType
@@ -121,14 +139,14 @@ func getRuleTypes(objects map[string]*ast.Object) map[string]*ast.StructType {
 	return ruleTypes
 }
 
-func getRule(typeName string, structType *ast.StructType, isRuleType func(string) bool) *Rule {
+func getRule(typeName string, structType *ast.StructType, grammarPackageName string, isRuleType func(string) bool) *Rule {
 	if len(structType.Fields.List) == 0 {
 		return nil
 	}
 	fields := structType.Fields.List
 	firstFieldTypeName := getName(fields[0].Type)
-	isOneOf := firstFieldTypeName == "grammar.OneOf"
-	if isOneOf || firstFieldTypeName == "grammar.Seq" {
+	isOneOf := firstFieldTypeName == grammarPackageName+".OneOf"
+	if isOneOf || firstFieldTypeName == grammarPackageName+".Seq" {
 		fields = fields[1:]
 	}
 	var ruleFields []RuleField
