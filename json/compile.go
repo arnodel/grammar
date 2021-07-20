@@ -22,7 +22,7 @@ func (j Json) Compile() interface{} {
 }
 
 func (n Number) Compile() float64 {
-	x, err := strconv.ParseFloat(n.Value.tokValue, 64)
+	x, err := strconv.ParseFloat(n.Value.Value(), 64)
 	if err != nil {
 		panic(err)
 	}
@@ -30,7 +30,7 @@ func (n Number) Compile() float64 {
 }
 
 func (s String) Compile() string {
-	cs, err := strconv.Unquote(s.Value.tokValue)
+	cs, err := strconv.Unquote(s.Value.Value())
 	if err != nil {
 		panic(err)
 	}
@@ -42,7 +42,7 @@ func (n Null) Compile() interface{} {
 }
 
 func (b Bool) Compile() bool {
-	switch b.Value.tokValue {
+	switch b.Value.Value() {
 	case "true":
 		return true
 	case "false":

@@ -10,8 +10,8 @@ import (
 // interfaces.  So it can be used in rules to match a token field.  It is also
 // the concrete type of Tokens returned by SimpleTokenStream.
 type SimpleToken struct {
-	tokType  string
-	tokValue string
+	TokType  string
+	TokValue string
 }
 
 var _ Token = SimpleToken{}
@@ -19,25 +19,25 @@ var _ Token = SimpleToken{}
 // EOF is the token that is returned when trying to consument an exhausted token
 // stream.
 var EOF = SimpleToken{
-	tokType:  "EOF",
-	tokValue: "EOF",
+	TokType:  "EOF",
+	TokValue: "EOF",
 }
 
 // Type returns the token type.
 func (t SimpleToken) Type() string {
-	return t.tokType
+	return t.TokType
 }
 
 // Value returns the value of the token.
 func (t SimpleToken) Value() string {
-	return t.tokValue
+	return t.TokValue
 }
 
 // Parse tries to match the next token in the given TokenStream with the
 // ParseOptions, using opts.MatchToken.  If they match, the receiver is loaded
 // with the token data, if not a non-nil *ParseError is returned.  In any event
 // the next token in the token stream has been consumed.
-func (t *SimpleToken) Parse(s TokenStream, opts ParseOptions) *ParseError {
+func (t *SimpleToken) Parse(_ interface{}, s TokenStream, opts ParseOptions) *ParseError {
 	tok := s.Next()
 	if err := opts.MatchToken(tok); err != nil {
 		return &ParseError{
@@ -46,8 +46,8 @@ func (t *SimpleToken) Parse(s TokenStream, opts ParseOptions) *ParseError {
 			Pos:   s.Save(),
 		}
 	}
-	t.tokType = tok.Type()
-	t.tokValue = tok.Value()
+	t.TokType = tok.Type()
+	t.TokValue = tok.Value()
 	return nil
 }
 
@@ -56,6 +56,12 @@ func (t *SimpleToken) Parse(s TokenStream, opts ParseOptions) *ParseError {
 type SimpleTokenStream struct {
 	tokens     []Token
 	currentPos int
+}
+
+func NewSimpleTokenStream(toks []Token) *SimpleTokenStream {
+	return &SimpleTokenStream{
+		tokens: toks,
+	}
 }
 
 var _ TokenStream = (*SimpleTokenStream)(nil)
@@ -114,7 +120,7 @@ func SimpleTokeniser(tokenDefs []TokenDef) func(string) (*SimpleTokenStream, err
 				}
 			}
 			if tokType != "" {
-				toks = append(toks, SimpleToken{tokType: tokType, tokValue: tokValue})
+				toks = append(toks, SimpleToken{TokType: tokType, TokValue: tokValue})
 			}
 			s = s[len(tokValue):]
 		}

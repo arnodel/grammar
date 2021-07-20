@@ -9,27 +9,27 @@ import (
 )
 
 func str(s string) Token {
-	return Token{tokType: "string", tokValue: s}
+	return Token{TokType: "string", TokValue: s}
 }
 
 func num(s string) Token {
-	return Token{tokType: "number", tokValue: s}
+	return Token{TokType: "number", TokValue: s}
 }
 
 func bl(s string) Token {
-	return Token{tokType: "bool", tokValue: s}
+	return Token{TokType: "bool", TokValue: s}
 }
 
 func null() Token {
-	return Token{tokType: "null", tokValue: "null"}
+	return Token{TokType: "null", TokValue: "null"}
 }
 
 func op(s string) Token {
-	return Token{tokType: "op", tokValue: s}
+	return Token{TokType: "op", TokValue: s}
 }
 
-func s(toks ...grammar.Token) *SliceTokenStream {
-	return &SliceTokenStream{tokens: toks}
+func s(toks ...grammar.Token) grammar.TokenStream {
+	return grammar.NewSimpleTokenStream(toks)
 }
 
 func TestParse(t *testing.T) {
