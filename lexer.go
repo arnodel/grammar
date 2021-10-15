@@ -70,15 +70,18 @@ var _ TokenStream = (*SimpleTokenStream)(nil)
 // stream is exhausted, EOF is returned.
 func (s *SimpleTokenStream) Next() Token {
 	if s.currentPos >= len(s.tokens) {
+		// log.Print("Next token: EOF")
 		return EOF
 	}
 	tok := s.tokens[s.currentPos]
 	s.currentPos++
+	// log.Printf("Next token: %q", tok.Value())
 	return tok
 }
 
 // Save returns the current position in the token stream.
 func (s *SimpleTokenStream) Save() int {
+	// log.Print("Saving pos: ", s.currentPos)
 	return s.currentPos
 }
 
@@ -86,14 +89,16 @@ func (s *SimpleTokenStream) Save() int {
 // been obtained by s.Save()).  In general this may panic - in this
 // implementation it's always possible to rewind.
 func (s *SimpleTokenStream) Restore(pos int) {
+	// log.Print("Restoring pos: ", pos)
 	s.currentPos = pos
 }
 
 // A TokenDef defines a type of token and the pattern that matches it.  Used by
 // SimpleTokeniser to create tokenisers simply.
 type TokenDef struct {
-	Ptn  string // The regular expression the token should match
-	Name string // The name given to this token type
+	Ptn     string              // The regular expression the token should match
+	Name    string              // The name given to this token type
+	Special func(string) string // If defined, it takes over the tokenising for this pattern
 }
 
 // SimpleTokeniser takes a list of TokenDefs and returns a function that can
@@ -115,7 +120,11 @@ func SimpleTokeniser(tokenDefs []TokenDef) func(string) (*SimpleTokenStream, err
 			tokValue := matches[0]
 			for i, match := range matches[1:] {
 				if match != "" {
-					tokType = tokenDefs[i].Name
+					tokDef := tokenDefs[i]
+					if tokDef.Special != nil {
+						tokValue = tokDef.Special(s)
+					}
+					tokType = tokDef.Name
 					break
 				}
 			}

@@ -42,9 +42,10 @@ func Parse(dest interface{}, s TokenStream) *ParseError {
 func ParseWithOptions(dest interface{}, s TokenStream, opts ParseOptions) *ParseError {
 	switch p := dest.(type) {
 	case Parser:
+		// log.Printf("ParseWithOptions: %T, %v", p, opts)
 		return p.Parse(dest, s, opts)
 	default:
-		panic("invalid type for rule")
+		panic(fmt.Sprintf("invalid type for rule %#v", dest))
 	}
 }
 
