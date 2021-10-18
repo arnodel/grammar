@@ -117,7 +117,7 @@ func SimpleTokeniser(tokenDefs []TokenDef) func(string) (*SimpleTokenStream, err
 		if _, ok := ptnStrings[tokenDef.Mode]; ok {
 			ptnStrings[tokenDef.Mode] += "|" + ptn
 		} else {
-			ptnStrings[tokenDef.Mode] = `^(?: ` + ptn
+			ptnStrings[tokenDef.Mode] = `^(?:` + ptn
 		}
 		modeTokenDefs[tokenDef.Mode] = append(modeTokenDefs[tokenDef.Mode], tokenDef)
 	}
