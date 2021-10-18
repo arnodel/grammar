@@ -2,6 +2,7 @@ package grammar
 
 import (
 	"fmt"
+	"io"
 	"regexp"
 	"strings"
 )
@@ -15,6 +16,7 @@ type SimpleToken struct {
 }
 
 var _ Token = SimpleToken{}
+var _ Parser = &SimpleToken{}
 
 // EOF is the token that is returned when trying to consument an exhausted token
 // stream.
@@ -37,17 +39,21 @@ func (t SimpleToken) Value() string {
 // ParseOptions, using opts.MatchToken.  If they match, the receiver is loaded
 // with the token data, if not a non-nil *ParseError is returned.  In any event
 // the next token in the token stream has been consumed.
-func (t *SimpleToken) Parse(_ interface{}, s TokenStream, opts ParseOptions) *ParseError {
+func (t *SimpleToken) Parse(_ interface{}, s *ParserState, opts ParseOptions) *ParseError {
+	pos := s.Save()
 	tok := s.Next()
 	if err := opts.MatchToken(tok); err != nil {
-		return &ParseError{
+		parseErr := &ParseError{
 			Token: tok,
 			Err:   err,
-			Pos:   s.Save(),
+			Pos:   pos,
 		}
+		// log.Printf("!!! Token Parse Error: %s", parseErr)
+		return parseErr
 	}
 	t.TokType = tok.Type()
 	t.TokValue = tok.Value()
+	// log.Printf("+++ parsed tok #%d: (%s, %q)", pos, t.TokType, t.TokValue)
 	return nil
 }
 
@@ -91,6 +97,16 @@ func (s *SimpleTokenStream) Save() int {
 func (s *SimpleTokenStream) Restore(pos int) {
 	// log.Print("Restoring pos: ", pos)
 	s.currentPos = pos
+}
+
+func (s *SimpleTokenStream) Dump(w io.Writer) {
+	for i, tok := range s.tokens {
+		currentMarker := " "
+		if i == s.currentPos {
+			currentMarker = "*"
+		}
+		fmt.Fprintf(w, "%3d%s %s %q\n", i, currentMarker, tok.Type(), tok.Value())
+	}
 }
 
 // A TokenDef defines a type of token and the pattern that matches it.  Used by
