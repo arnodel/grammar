@@ -4,10 +4,20 @@ import (
 	"fmt"
 )
 
+type ParserState struct {
+	TokenStream
+	lastErr *ParseError
+}
+
+func (s *ParserState) MergeError(err *ParseError) *ParseError {
+	s.lastErr = s.lastErr.Merge(err)
+	return s.lastErr
+}
+
 // A Parser can parse a token stream to populate itself.  It must return an
 // error if it fails to do it.
 type Parser interface {
-	Parse(r interface{}, t TokenStream, opts ParseOptions) *ParseError
+	Parse(r interface{}, s *ParserState, opts ParseOptions) *ParseError
 }
 
 // A Token has a Type() and Value() method. A TokenStream's Next() method must
@@ -34,16 +44,27 @@ type TokenStream interface {
 // token stream.  Parse can panic if dest is not a valid grammar rule.  It
 // returns a non-nil *ParseError if the token stream does not match the rule.
 func Parse(dest interface{}, s TokenStream) *ParseError {
-	return ParseWithOptions(dest, s, ParseOptions{})
+	state := &ParserState{
+		TokenStream: s,
+	}
+	err := ParseWithOptions(dest, state, ParseOptions{})
+	if err != nil {
+		return state.lastErr
+	}
+	return nil
 }
 
 // ParseWithOptions is the same as Parse but the ParseOptions are explicitely
 // given (this is mostly used by the parser generator).
-func ParseWithOptions(dest interface{}, s TokenStream, opts ParseOptions) *ParseError {
+func ParseWithOptions(dest interface{}, s *ParserState, opts ParseOptions) *ParseError {
 	switch p := dest.(type) {
 	case Parser:
 		// log.Printf("ParseWithOptions: %T, %v", p, opts)
-		return p.Parse(dest, s, opts)
+		err := p.Parse(dest, s, opts)
+		if err != nil {
+			s.MergeError(err)
+		}
+		return err
 	default:
 		panic(fmt.Sprintf("invalid type for rule %#v", dest))
 	}

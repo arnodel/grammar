@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"strconv"
 	"strings"
 )
 
@@ -13,7 +14,7 @@ type OneOf struct{}
 
 var _ Parser = OneOf{}
 
-func (OneOf) Parse(r interface{}, s TokenStream, opts ParseOptions) *ParseError {
+func (OneOf) Parse(r interface{}, s *ParserState, opts ParseOptions) *ParseError {
 	ruleDef, elem := getRuleDefAndValue(r)
 	var err, fieldErr *ParseError
 	for _, ruleField := range ruleDef.Fields {
@@ -33,20 +34,26 @@ func (OneOf) Parse(r interface{}, s TokenStream, opts ParseOptions) *ParseError 
 		case ruleField.Array:
 			{
 				itemsV := reflect.Zero(reflect.SliceOf(ruleField.BaseType))
-				for {
+				var sz int
+				arrStart := s.Save()
+				for sz = 0; ruleField.Max == 0 || sz < ruleField.Max; sz++ {
 					start := s.Save()
 					itemPtrV := reflect.New(ruleField.BaseType)
 					fieldErr = ParseWithOptions(itemPtrV.Interface(), s, ruleField.ParseOptions)
 					if fieldErr != nil {
+						if sz < ruleField.Min {
+							s.Restore(arrStart)
+							break
+						}
 						s.Restore(start)
+						if sz > 0 {
+							elem.Field(ruleField.Index).Set(itemsV)
+							return nil
+						}
 						err = err.Merge(fieldErr)
 						break
 					}
 					itemsV = reflect.Append(itemsV, itemPtrV.Elem())
-				}
-				if itemsV.Len() > 0 {
-					elem.Field(ruleField.Index).Set(itemsV)
-					return nil
 				}
 			}
 		default:
@@ -62,9 +69,9 @@ type Seq struct{}
 
 var _ Parser = Seq{}
 
-func (Seq) Parse(r interface{}, s TokenStream, opts ParseOptions) *ParseError {
+func (Seq) Parse(r interface{}, s *ParserState, opts ParseOptions) *ParseError {
 	ruleDef, elem := getRuleDefAndValue(r)
-	var fieldErr *ParseError
+	var err, fieldErr *ParseError
 	for _, ruleField := range ruleDef.Fields {
 		switch {
 		case ruleField.Pointer:
@@ -73,6 +80,7 @@ func (Seq) Parse(r interface{}, s TokenStream, opts ParseOptions) *ParseError {
 				fieldPtrV := reflect.New(ruleField.BaseType)
 				fieldErr = ParseWithOptions(fieldPtrV.Interface(), s, ruleField.ParseOptions)
 				if fieldErr != nil {
+					err = err.Merge(fieldErr)
 					s.Restore(start)
 				} else {
 					elem.Field(ruleField.Index).Set(fieldPtrV)
@@ -81,11 +89,16 @@ func (Seq) Parse(r interface{}, s TokenStream, opts ParseOptions) *ParseError {
 		case ruleField.Array:
 			{
 				itemsV := reflect.Zero(reflect.SliceOf(ruleField.BaseType))
-				for {
+				var sz int
+				for sz = 0; ruleField.Max == 0 || sz < ruleField.Max; sz++ {
 					start := s.Save()
 					itemPtrV := reflect.New(ruleField.BaseType)
 					fieldErr = ParseWithOptions(itemPtrV.Interface(), s, ruleField.ParseOptions)
 					if fieldErr != nil {
+						err = err.Merge(fieldErr)
+						if sz < ruleField.Min {
+							return err
+						}
 						s.Restore(start)
 						break
 					}
@@ -97,7 +110,7 @@ func (Seq) Parse(r interface{}, s TokenStream, opts ParseOptions) *ParseError {
 			fieldPtrV := reflect.New(ruleField.BaseType)
 			fieldErr = ParseWithOptions(fieldPtrV.Interface(), s, ruleField.ParseOptions)
 			if fieldErr != nil {
-				return fieldErr
+				return err.Merge(fieldErr)
 			}
 			elem.Field(ruleField.Index).Set(fieldPtrV.Elem())
 		}
@@ -114,6 +127,7 @@ type RuleDef struct {
 type RuleField struct {
 	FieldType
 	ParseOptions
+	SizeOptions
 	Name  string
 	Index int
 }
@@ -129,6 +143,10 @@ type ParseOptions struct {
 	TokenValue string
 }
 
+type SizeOptions struct {
+	Min, Max int
+}
+
 func (opts ParseOptions) MatchToken(tok Token) error {
 	if opts.TokenType != "" && opts.TokenType != tok.Type() {
 		return fmt.Errorf("expected token of type %s", opts.TokenType)
@@ -139,7 +157,10 @@ func (opts ParseOptions) MatchToken(tok Token) error {
 	return nil
 }
 
-func optionsFromTagValue(v string) ParseOptions {
+func parseOptionsFromTagValue(v string) ParseOptions {
+	if v == "" {
+		return ParseOptions{}
+	}
 	if i := strings.IndexByte(v, ','); i >= 0 {
 		return ParseOptions{
 			TokenType:  v[:i],
@@ -147,6 +168,27 @@ func optionsFromTagValue(v string) ParseOptions {
 		}
 	}
 	return ParseOptions{TokenType: v}
+}
+
+func sizeOptionsFromTagValue(v string) (opts SizeOptions, err error) {
+	if v == "" {
+		return
+	}
+	var min, max uint64
+	if i := strings.IndexByte(v, '-'); i >= 0 {
+		if i > 0 {
+			min, err = strconv.ParseUint(v[:i], 10, 64)
+		}
+		if err == nil && i+1 < len(v) {
+			max, err = strconv.ParseUint(v[i+1:], 10, 64)
+		}
+	} else {
+		min, err = strconv.ParseUint(v, 10, 64)
+		max = min
+	}
+	opts.Min = int(min)
+	opts.Max = int(max)
+	return
 }
 
 func calcRuleDef(tp reflect.Type) (*RuleDef, error) {
@@ -168,8 +210,13 @@ func calcRuleDef(tp reflect.Type) (*RuleDef, error) {
 	var ruleFields []RuleField
 	for fieldIndex := firstFieldIndex; fieldIndex < numField; fieldIndex++ {
 		field := tp.Field(fieldIndex)
+		sizeOpts, err := sizeOptionsFromTagValue(field.Tag.Get("size"))
+		if err != nil {
+			return nil, err
+		}
 		ruleField := RuleField{
-			ParseOptions: optionsFromTagValue(field.Tag.Get("tok")),
+			ParseOptions: parseOptionsFromTagValue(field.Tag.Get("tok")),
+			SizeOptions:  sizeOpts,
 			Name:         field.Name,
 			Index:        fieldIndex,
 		}
