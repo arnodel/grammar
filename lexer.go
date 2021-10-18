@@ -153,7 +153,6 @@ func SimpleTokeniser(tokenDefs []TokenDef) func(string) (*SimpleTokenStream, err
 						if last < 0 {
 							return nil, errors.New("no mode to pop")
 						}
-
 						mode = prevModes[last]
 						prevModes = prevModes[:last]
 					}
