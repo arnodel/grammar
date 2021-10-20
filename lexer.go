@@ -1,10 +1,10 @@
 package grammar
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"regexp"
-	"strings"
 )
 
 // SimpleToken is a simple implementation of the both the Token and the Parser
@@ -76,12 +76,12 @@ var _ TokenStream = (*SimpleTokenStream)(nil)
 // stream is exhausted, EOF is returned.
 func (s *SimpleTokenStream) Next() Token {
 	if s.currentPos >= len(s.tokens) {
-		// log.Print("Next token: EOF")
+		// log.Printf("Next token %d: EOF", s.currentPos)
 		return EOF
 	}
 	tok := s.tokens[s.currentPos]
 	s.currentPos++
-	// log.Printf("Next token: %q", tok.Value())
+	// log.Printf("Next token: %d %q", s.currentPos-1, tok.Value())
 	return tok
 }
 
@@ -112,23 +112,42 @@ func (s *SimpleTokenStream) Dump(w io.Writer) {
 // A TokenDef defines a type of token and the pattern that matches it.  Used by
 // SimpleTokeniser to create tokenisers simply.
 type TokenDef struct {
-	Ptn     string              // The regular expression the token should match
-	Name    string              // The name given to this token type
-	Special func(string) string // If defined, it takes over the tokenising for this pattern
+	Ptn      string              // The regular expression the token should match
+	Name     string              // The name given to this token type
+	Special  func(string) string // If defined, it takes over the tokenising for this pattern
+	Mode     string
+	PushMode string
+	PopMode  bool
+}
+
+type Mode struct {
 }
 
 // SimpleTokeniser takes a list of TokenDefs and returns a function that can
 // tokenise a string.  Designed for simple use-cases.
 func SimpleTokeniser(tokenDefs []TokenDef) func(string) (*SimpleTokenStream, error) {
-	ptns := make([]string, len(tokenDefs))
-	for i, tokenDef := range tokenDefs {
-		ptns[i] = fmt.Sprintf(`(%s)`, tokenDef.Ptn)
+	modeTokenDefs := make(map[string][]TokenDef)
+	ptnStrings := make(map[string]string)
+	for _, tokenDef := range tokenDefs {
+		ptn := fmt.Sprintf(`(%s)`, tokenDef.Ptn)
+		if _, ok := ptnStrings[tokenDef.Mode]; ok {
+			ptnStrings[tokenDef.Mode] += "|" + ptn
+		} else {
+			ptnStrings[tokenDef.Mode] = `^(?:` + ptn
+		}
+		modeTokenDefs[tokenDef.Mode] = append(modeTokenDefs[tokenDef.Mode], tokenDef)
 	}
-	ptn := regexp.MustCompile(fmt.Sprintf(`^(?:%s)`, strings.Join(ptns, "|")))
+	ptns := make(map[string]*regexp.Regexp)
+	for m, s := range ptnStrings {
+		ptns[m] = regexp.MustCompile(s + ")")
+	}
+	initialMode := tokenDefs[0].Mode
 	return func(s string) (*SimpleTokenStream, error) {
+		mode := initialMode
+		var prevModes []string
 		var toks []Token
 		for len(s) > 0 {
-			matches := ptn.FindStringSubmatch(s)
+			matches := ptns[mode].FindStringSubmatch(s)
 			if matches == nil {
 				return nil, fmt.Errorf("invalid input string")
 			}
@@ -136,11 +155,23 @@ func SimpleTokeniser(tokenDefs []TokenDef) func(string) (*SimpleTokenStream, err
 			tokValue := matches[0]
 			for i, match := range matches[1:] {
 				if match != "" {
-					tokDef := tokenDefs[i]
+					tokDef := modeTokenDefs[mode][i]
 					if tokDef.Special != nil {
 						tokValue = tokDef.Special(s)
 					}
 					tokType = tokDef.Name
+					switch {
+					case tokDef.PushMode != "":
+						prevModes = append(prevModes, mode)
+						mode = tokDef.PushMode
+					case tokDef.PopMode:
+						last := len(prevModes) - 1
+						if last < 0 {
+							return nil, errors.New("no mode to pop")
+						}
+						mode = prevModes[last]
+						prevModes = prevModes[:last]
+					}
 					break
 				}
 			}
