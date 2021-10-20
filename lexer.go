@@ -76,12 +76,12 @@ var _ TokenStream = (*SimpleTokenStream)(nil)
 // stream is exhausted, EOF is returned.
 func (s *SimpleTokenStream) Next() Token {
 	if s.currentPos >= len(s.tokens) {
-		// log.Print("Next token: EOF")
+		// log.Printf("Next token %d: EOF", s.currentPos)
 		return EOF
 	}
 	tok := s.tokens[s.currentPos]
 	s.currentPos++
-	// log.Printf("Next token: %q", tok.Value())
+	// log.Printf("Next token: %d %q", s.currentPos-1, tok.Value())
 	return tok
 }
 

@@ -7,6 +7,7 @@ import (
 type ParserState struct {
 	TokenStream
 	lastErr *ParseError
+	depth   int
 }
 
 func (s *ParserState) MergeError(err *ParseError) *ParseError {
@@ -59,11 +60,14 @@ func Parse(dest interface{}, s TokenStream) *ParseError {
 func ParseWithOptions(dest interface{}, s *ParserState, opts ParseOptions) *ParseError {
 	switch p := dest.(type) {
 	case Parser:
-		// log.Printf("ParseWithOptions: %T, %v", p, opts)
+		// fmt.Printf("% *d===> %T, %v\n", s.depth*2, s.depth, p, opts)
+		s.depth++
 		err := p.Parse(dest, s, opts)
+		s.depth--
 		if err != nil {
 			s.MergeError(err)
 		}
+		// fmt.Printf("% *d<=== %s\n", s.depth*2, s.depth, err)
 		return err
 	default:
 		panic(fmt.Sprintf("invalid type for rule %#v", dest))

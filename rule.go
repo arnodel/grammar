@@ -72,6 +72,7 @@ var _ Parser = Seq{}
 func (Seq) Parse(r interface{}, s *ParserState, opts ParseOptions) *ParseError {
 	ruleDef, elem := getRuleDefAndValue(r)
 	var err, fieldErr *ParseError
+	itemCount := 0
 	for _, ruleField := range ruleDef.Fields {
 		switch {
 		case ruleField.Pointer:
@@ -84,6 +85,7 @@ func (Seq) Parse(r interface{}, s *ParserState, opts ParseOptions) *ParseError {
 					s.Restore(start)
 				} else {
 					elem.Field(ruleField.Index).Set(fieldPtrV)
+					itemCount++
 				}
 			}
 		case ruleField.Array:
@@ -103,6 +105,7 @@ func (Seq) Parse(r interface{}, s *ParserState, opts ParseOptions) *ParseError {
 						break
 					}
 					itemsV = reflect.Append(itemsV, itemPtrV.Elem())
+					itemCount++
 				}
 				elem.Field(ruleField.Index).Set(itemsV)
 			}
@@ -113,6 +116,16 @@ func (Seq) Parse(r interface{}, s *ParserState, opts ParseOptions) *ParseError {
 				return err.Merge(fieldErr)
 			}
 			elem.Field(ruleField.Index).Set(fieldPtrV.Elem())
+			itemCount++
+		}
+	}
+	if itemCount == 0 {
+		pos := s.Save()
+		tok := s.Next()
+		return &ParseError{
+			Token: tok,
+			Err:   fmt.Errorf("Empty match for rule %s", ruleDef.Name),
+			Pos:   pos,
 		}
 	}
 	return nil
