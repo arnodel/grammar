@@ -124,7 +124,7 @@ func (Seq) Parse(r interface{}, s *ParserState, opts ParseOptions) *ParseError {
 		tok := s.Next()
 		return &ParseError{
 			Token: tok,
-			Err:   fmt.Errorf("Empty match for rule %s", ruleDef.Name),
+			Err:   fmt.Errorf("empty match for rule %s", ruleDef.Name),
 			Pos:   pos,
 		}
 	}
@@ -151,36 +151,76 @@ type FieldType struct {
 	Array    bool
 }
 
+type TokenParseOptions struct {
+	TokenType    string
+	TokenValue   string
+	DoNotConsume bool
+}
+
+func (o TokenParseOptions) String() string {
+	var parts []string
+	if o.TokenType != "" {
+		parts = append(parts, fmt.Sprintf("type %s", o.TokenType))
+	}
+	if o.TokenValue != "" {
+		parts = append(parts, fmt.Sprintf("value %q", o.TokenValue))
+	}
+	if len(parts) == 0 {
+		return "any type"
+	}
+	return strings.Join(parts, ",")
+}
+
 type ParseOptions struct {
-	TokenType  string
-	TokenValue string
+	TokenParseOptions []TokenParseOptions
 }
 
 type SizeOptions struct {
 	Min, Max int
 }
 
-func (opts ParseOptions) MatchToken(tok Token) error {
-	if opts.TokenType != "" && opts.TokenType != tok.Type() {
-		return fmt.Errorf("expected token of type %s", opts.TokenType)
+func (o ParseOptions) MatchToken(tok Token) (bool, bool) {
+	if len(o.TokenParseOptions) == 0 {
+		return true, false
 	}
-	if opts.TokenValue != "" && opts.TokenValue != tok.Value() {
-		return fmt.Errorf("expected token with value %q", opts.TokenValue)
+	for _, opts := range o.TokenParseOptions {
+		if opts.TokenType != "" && opts.TokenType != tok.Type() {
+			continue
+			// return fmt.Errorf("expected token of type %s", opts.TokenType)
+		}
+		if opts.TokenValue != "" && opts.TokenValue != tok.Value() {
+			continue
+			// return fmt.Errorf("expected token with value %q", opts.TokenValue)
+		}
+		return true, opts.DoNotConsume
 	}
-	return nil
+	return false, false
 }
 
 func parseOptionsFromTagValue(v string) ParseOptions {
-	if v == "" {
-		return ParseOptions{}
-	}
-	if i := strings.IndexByte(v, ','); i >= 0 {
-		return ParseOptions{
-			TokenType:  v[:i],
-			TokenValue: v[i+1:],
+	var opts []TokenParseOptions
+	for _, optStr := range strings.Split(v, "|") {
+		if optStr == "" {
+			continue
 		}
+		var tt, tv string
+		if i := strings.IndexByte(optStr, ','); i >= 0 {
+			tt = optStr[:i]
+			tv = optStr[i+1:]
+		} else {
+			tt = optStr
+		}
+		dnc := tt[len(tt)-1] == '*'
+		if dnc {
+			tt = tt[:len(tt)-1]
+		}
+		opts = append(opts, TokenParseOptions{
+			TokenType:    tt,
+			TokenValue:   tv,
+			DoNotConsume: dnc,
+		})
 	}
-	return ParseOptions{TokenType: v}
+	return ParseOptions{TokenParseOptions: opts}
 }
 
 func sizeOptionsFromTagValue(v string) (opts SizeOptions, err error) {

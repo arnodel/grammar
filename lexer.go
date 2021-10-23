@@ -42,14 +42,18 @@ func (t SimpleToken) Value() string {
 func (t *SimpleToken) Parse(_ interface{}, s *ParserState, opts ParseOptions) *ParseError {
 	pos := s.Save()
 	tok := s.Next()
-	if err := opts.MatchToken(tok); err != nil {
+	ok, doNotConsume := opts.MatchToken(tok)
+	if !ok {
 		parseErr := &ParseError{
-			Token: tok,
-			Err:   err,
-			Pos:   pos,
+			Token:             tok,
+			TokenParseOptions: opts.TokenParseOptions,
+			Pos:               pos,
 		}
 		// log.Printf("!!! Token Parse Error: %s", parseErr)
 		return parseErr
+	}
+	if doNotConsume {
+		s.Restore(pos)
 	}
 	t.TokType = tok.Type()
 	t.TokValue = tok.Value()

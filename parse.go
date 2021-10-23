@@ -2,6 +2,7 @@ package grammar
 
 import (
 	"fmt"
+	"strings"
 )
 
 type ParserState struct {
@@ -77,11 +78,26 @@ func ParseWithOptions(dest interface{}, s *ParserState, opts ParseOptions) *Pars
 type ParseError struct {
 	Err error
 	Token
-	Pos int
+	TokenParseOptions []TokenParseOptions
+	Pos               int
 }
 
 func (e *ParseError) Error() string {
-	return fmt.Sprintf("token #%d %s with value %q: %s", e.Pos, e.Token.Type(), e.Token.Value(), e.Err)
+	var hint string
+	if e.Err != nil {
+		hint = e.Err.Error()
+	} else if len(e.TokenParseOptions) != 0 {
+		var b strings.Builder
+		b.WriteString("expected token with ")
+		for i, opts := range e.TokenParseOptions {
+			if i > 0 {
+				b.WriteString(" or ")
+			}
+			b.WriteString(opts.String())
+		}
+		hint = b.String()
+	}
+	return fmt.Sprintf("token #%d %s with value %q: %s", e.Pos, e.Token.Type(), e.Token.Value(), hint)
 }
 
 func (e *ParseError) Merge(e2 *ParseError) *ParseError {
@@ -91,8 +107,15 @@ func (e *ParseError) Merge(e2 *ParseError) *ParseError {
 	if e2 == nil {
 		return e
 	}
-	if e.Pos >= e2.Pos {
+	if e.Pos > e2.Pos {
 		return e
 	}
-	return e2
+	if e.Pos < e2.Pos {
+		return e2
+	}
+	return &ParseError{
+		Token:             e.Token,
+		TokenParseOptions: append(e.TokenParseOptions, e2.TokenParseOptions...),
+		Pos:               e.Pos,
+	}
 }
