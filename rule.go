@@ -8,6 +8,12 @@ import (
 	"strings"
 )
 
+type Empty struct{}
+
+func (Empty) Parse(r interface{}, s *ParserState, opts ParseOptions) *ParseError {
+	return nil
+}
+
 // OneOf should be used as the first field of a Rule struct to signify that it
 // should match exactly one of the fields
 type OneOf struct{}
@@ -95,9 +101,11 @@ func (Seq) Parse(r interface{}, s *ParserState, opts ParseOptions) *ParseError {
 		needsSeparator = false
 		return nil
 	}
-
 	var fieldPtrV reflect.Value
 	for _, ruleField := range ruleDef.Fields {
+		if s.Debug() {
+			s.Logf("  .%s tok #%d", ruleField.Name, s.Save())
+		}
 		switch {
 		case ruleField.Pointer:
 			{

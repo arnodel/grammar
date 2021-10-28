@@ -2,6 +2,7 @@ package grammar
 
 import (
 	"fmt"
+	"log"
 	"strings"
 )
 
@@ -9,11 +10,22 @@ type ParserState struct {
 	TokenStream
 	lastErr *ParseError
 	depth   int
+	logger  *log.Logger
 }
 
 func (s *ParserState) MergeError(err *ParseError) *ParseError {
 	s.lastErr = s.lastErr.Merge(err)
 	return s.lastErr
+}
+
+func (s *ParserState) Debug() bool {
+	return s.logger != nil
+}
+
+func (s *ParserState) Logf(fstr string, args ...interface{}) {
+	if s.logger != nil {
+		s.logger.Printf("% *d"+fstr, append([]interface{}{s.depth * 2, s.depth}, args...)...)
+	}
 }
 
 // A Parser can parse a token stream to populate itself.  It must return an
@@ -42,12 +54,25 @@ type TokenStream interface {
 	Restore(int) // Return the stream to the given position.
 }
 
+type ParseOption func(s *ParserState)
+
+func WithLogger(l *log.Logger) ParseOption {
+	return func(s *ParserState) {
+		s.logger = l
+	}
+}
+
+var WithDefaultLogger = WithLogger(log.Default())
+
 // Parse tries to interpret dest as a grammar rule and use it to parse the given
 // token stream.  Parse can panic if dest is not a valid grammar rule.  It
 // returns a non-nil *ParseError if the token stream does not match the rule.
-func Parse(dest interface{}, s TokenStream) *ParseError {
+func Parse(dest interface{}, s TokenStream, opts ...ParseOption) *ParseError {
 	state := &ParserState{
 		TokenStream: s,
+	}
+	for _, opt := range opts {
+		opt(state)
 	}
 	err := ParseWithOptions(dest, state, ParseOptions{})
 	if err != nil {
@@ -61,14 +86,18 @@ func Parse(dest interface{}, s TokenStream) *ParseError {
 func ParseWithOptions(dest interface{}, s *ParserState, opts ParseOptions) *ParseError {
 	switch p := dest.(type) {
 	case Parser:
-		// fmt.Printf("% *d===> %T, %v\n", s.depth*2, s.depth, p, opts)
+		if s.Debug() {
+			s.Logf("===> %T, %v", p, opts)
+		}
 		s.depth++
 		err := p.Parse(dest, s, opts)
 		s.depth--
 		if err != nil {
 			s.MergeError(err)
 		}
-		// fmt.Printf("% *d<=== %s\n", s.depth*2, s.depth, err)
+		if s.Debug() {
+			s.Logf("<=== %s", err)
+		}
 		return err
 	default:
 		panic(fmt.Sprintf("invalid type for rule %#v", dest))
