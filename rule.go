@@ -73,19 +73,49 @@ func (Seq) Parse(r interface{}, s *ParserState, opts ParseOptions) *ParseError {
 	ruleDef, elem := getRuleDefAndValue(r)
 	var err, fieldErr *ParseError
 	itemCount := 0
+	needsSeparator := false
+	var sep interface{}
+	var sepOptional bool
+	if ruleDef.Separator != nil {
+		sep = reflect.New(ruleDef.Separator.BaseType).Interface()
+		sepOptional = ruleDef.Separator.Pointer
+	}
+	parseSep := func() *ParseError {
+		if sep == nil || !needsSeparator {
+			return nil
+		}
+		start := s.Save()
+		sepErr := ParseWithOptions(sep, s, ruleDef.Separator.ParseOptions)
+		if sepErr != nil {
+			if !sepOptional {
+				return sepErr
+			}
+			s.Restore(start)
+		}
+		needsSeparator = false
+		return nil
+	}
+
+	var fieldPtrV reflect.Value
 	for _, ruleField := range ruleDef.Fields {
 		switch {
 		case ruleField.Pointer:
 			{
 				start := s.Save()
-				fieldPtrV := reflect.New(ruleField.BaseType)
-				fieldErr = ParseWithOptions(fieldPtrV.Interface(), s, ruleField.ParseOptions)
+				needsSeparatorAtStart := needsSeparator
+				fieldErr = parseSep()
+				if fieldErr == nil {
+					fieldPtrV = reflect.New(ruleField.BaseType)
+					fieldErr = ParseWithOptions(fieldPtrV.Interface(), s, ruleField.ParseOptions)
+				}
 				if fieldErr != nil {
 					err = err.Merge(fieldErr)
+					needsSeparator = needsSeparatorAtStart
 					s.Restore(start)
 				} else {
 					elem.Field(ruleField.Index).Set(fieldPtrV)
 					itemCount++
+					needsSeparator = true
 				}
 			}
 		case ruleField.Array:
@@ -94,29 +124,39 @@ func (Seq) Parse(r interface{}, s *ParserState, opts ParseOptions) *ParseError {
 				var sz int
 				for sz = 0; ruleField.Max == 0 || sz < ruleField.Max; sz++ {
 					start := s.Save()
-					itemPtrV := reflect.New(ruleField.BaseType)
-					fieldErr = ParseWithOptions(itemPtrV.Interface(), s, ruleField.ParseOptions)
+					needsSeparatorAtStart := needsSeparator
+					fieldErr = parseSep()
+					if fieldErr == nil {
+						fieldPtrV = reflect.New(ruleField.BaseType)
+						fieldErr = ParseWithOptions(fieldPtrV.Interface(), s, ruleField.ParseOptions)
+					}
 					if fieldErr != nil {
 						err = err.Merge(fieldErr)
 						if sz < ruleField.Min {
 							return err
 						}
+						needsSeparator = needsSeparatorAtStart
 						s.Restore(start)
 						break
 					}
-					itemsV = reflect.Append(itemsV, itemPtrV.Elem())
+					itemsV = reflect.Append(itemsV, fieldPtrV.Elem())
 					itemCount++
+					needsSeparator = true
 				}
 				elem.Field(ruleField.Index).Set(itemsV)
 			}
 		default:
-			fieldPtrV := reflect.New(ruleField.BaseType)
-			fieldErr = ParseWithOptions(fieldPtrV.Interface(), s, ruleField.ParseOptions)
+			fieldErr = parseSep()
+			if fieldErr == nil {
+				fieldPtrV = reflect.New(ruleField.BaseType)
+				fieldErr = ParseWithOptions(fieldPtrV.Interface(), s, ruleField.ParseOptions)
+			}
 			if fieldErr != nil {
 				return err.Merge(fieldErr)
 			}
 			elem.Field(ruleField.Index).Set(fieldPtrV.Elem())
 			itemCount++
+			needsSeparator = true
 		}
 	}
 	if itemCount == 0 {
@@ -132,9 +172,10 @@ func (Seq) Parse(r interface{}, s *ParserState, opts ParseOptions) *ParseError {
 }
 
 type RuleDef struct {
-	Name   string
-	OneOf  bool
-	Fields []RuleField
+	Name      string
+	OneOf     bool
+	Separator *RuleField
+	Fields    []RuleField
 }
 
 type RuleField struct {
@@ -260,6 +301,7 @@ func calcRuleDef(tp reflect.Type) (*RuleDef, error) {
 	} else {
 		return nil, errors.New("first rule field should be OneOf or Rule")
 	}
+	var separatorField *RuleField
 	var ruleFields []RuleField
 	for fieldIndex := firstFieldIndex; fieldIndex < numField; fieldIndex++ {
 		field := tp.Field(fieldIndex)
@@ -292,12 +334,20 @@ func calcRuleDef(tp reflect.Type) (*RuleDef, error) {
 				BaseType: field.Type,
 			}
 		}
-		ruleFields = append(ruleFields, ruleField)
+		if field.Name == "Separator" {
+			if oneOf {
+				return nil, errors.New("OneOf rules cannot have a Separator field")
+			}
+			separatorField = &ruleField
+		} else {
+			ruleFields = append(ruleFields, ruleField)
+		}
 	}
 	return &RuleDef{
-		Name:   tp.Name(),
-		OneOf:  oneOf,
-		Fields: ruleFields,
+		Name:      tp.Name(),
+		OneOf:     oneOf,
+		Fields:    ruleFields,
+		Separator: separatorField,
 	}, nil
 }
 
