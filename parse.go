@@ -118,15 +118,51 @@ func (e *ParseError) Error() string {
 	} else if len(e.TokenParseOptions) != 0 {
 		var b strings.Builder
 		b.WriteString("expected token with ")
-		for i, opts := range e.TokenParseOptions {
-			if i > 0 {
-				b.WriteString(" or ")
+		types, values := summariseOptions(e.TokenParseOptions)
+		if len(types) > 0 {
+			b.WriteString("type ")
+			for i, t := range types {
+				if i > 0 {
+					b.WriteString(" or ")
+				}
+				b.WriteString(t)
 			}
-			b.WriteString(opts.String())
+		}
+		if len(values) > 0 {
+			if len(types) > 0 {
+				b.WriteString(", or ")
+			}
+			b.WriteString("value ")
+			for i, v := range values {
+				if i > 0 {
+					b.WriteString(" or ")
+				}
+				fmt.Fprintf(&b, "%q", v)
+			}
 		}
 		hint = b.String()
 	}
 	return fmt.Sprintf("token #%d %s with value %q: %s", e.Pos, e.Token.Type(), e.Token.Value(), hint)
+}
+
+func summariseOptions(opts []TokenParseOptions) ([]string, []string) {
+	seenTypes := map[string]struct{}{}
+	seenValues := map[string]struct{}{}
+	for _, opt := range opts {
+		if opt.TokenValue != "" {
+			seenValues[opt.TokenValue] = struct{}{}
+		} else if opt.TokenType != "" {
+			seenTypes[opt.TokenType] = struct{}{}
+		}
+	}
+	var types, values []string
+	for t := range seenTypes {
+		types = append(types, t)
+	}
+	for v := range seenValues {
+		values = append(values, v)
+	}
+	return types, values
 }
 
 func (e *ParseError) Merge(e2 *ParseError) *ParseError {
