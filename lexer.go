@@ -39,7 +39,7 @@ func (t SimpleToken) Value() string {
 // ParseOptions, using opts.MatchToken.  If they match, the receiver is loaded
 // with the token data, if not a non-nil *ParseError is returned.  In any event
 // the next token in the token stream has been consumed.
-func (t *SimpleToken) Parse(_ interface{}, s *ParserState, opts ParseOptions) *ParseError {
+func (t *SimpleToken) Parse(_ interface{}, s *ParserState, opts TokenOptions) *ParseError {
 	pos := s.Save()
 	tok := s.Next()
 	ok, doNotConsume := opts.MatchToken(tok)

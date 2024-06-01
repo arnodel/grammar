@@ -31,7 +31,7 @@ func (s *ParserState) Logf(fstr string, args ...interface{}) {
 // A Parser can parse a token stream to populate itself.  It must return an
 // error if it fails to do it.
 type Parser interface {
-	Parse(r interface{}, s *ParserState, opts ParseOptions) *ParseError
+	Parse(r interface{}, s *ParserState, opts TokenOptions) *ParseError
 }
 
 // A Token has a Type() and Value() method. A TokenStream's Next() method must
@@ -74,7 +74,7 @@ func Parse(dest interface{}, s TokenStream, opts ...ParseOption) *ParseError {
 	for _, opt := range opts {
 		opt(state)
 	}
-	err := ParseWithOptions(dest, state, ParseOptions{})
+	err := ParseWithOptions(dest, state, TokenOptions{})
 	if err != nil {
 		return state.lastErr
 	}
@@ -83,7 +83,7 @@ func Parse(dest interface{}, s TokenStream, opts ...ParseOption) *ParseError {
 
 // ParseWithOptions is the same as Parse but the ParseOptions are explicitely
 // given (this is mostly used by the parser generator).
-func ParseWithOptions(dest interface{}, s *ParserState, opts ParseOptions) *ParseError {
+func ParseWithOptions(dest interface{}, s *ParserState, opts TokenOptions) *ParseError {
 	switch p := dest.(type) {
 	case Parser:
 		if s.Debug() {

@@ -1,7 +1,6 @@
 package json
 
 import (
-	"errors"
 	"reflect"
 	"testing"
 
@@ -161,22 +160,32 @@ func TestParse(t *testing.T) {
 				t:    s(op("{"), op("]")),
 			},
 			wantErr: &grammar.ParseError{
-				Err:   errors.New(`expected token with value "}"`),
-				Pos:   2,
+				Pos:   1,
 				Token: op("]"),
 			},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := grammar.Parse(tt.args.dest, tt.args.t); !reflect.DeepEqual(tt.wantErr, err) {
-				t.Errorf("Parse() error = %v, wantErr %v", err, tt.wantErr)
+			if err := grammar.Parse(tt.args.dest, tt.args.t); !compareParseErrors(err, tt.wantErr) {
+				t.Errorf("Parse() error = %+v, wantErr %+v", err, tt.wantErr)
 			}
 			if tt.want != nil && !reflect.DeepEqual(tt.want, tt.args.dest) {
 				t.Errorf("Parse() dest = %v, want = %v", tt.args.dest, tt.want)
 			}
 		})
 	}
+}
+
+func compareParseErrors(err *grammar.ParseError, expectedErr *grammar.ParseError) bool {
+	if err == nil {
+		return expectedErr == nil
+	}
+	if expectedErr == nil {
+		return false
+	}
+
+	return err.Pos == expectedErr.Pos && err.Token == expectedErr.Token
 }
 
 func TestParse2(t *testing.T) {

@@ -132,7 +132,7 @@ func Test_calcRuleDef(t *testing.T) {
 					FieldType: FieldType{
 						BaseType: reflect.TypeOf(Token{}),
 					},
-					ParseOptions: ParseOptions{
+					TokenOptions: TokenOptions{
 						TokenParseOptions: []TokenParseOptions{
 							{
 								TokenType:  "op",
@@ -149,7 +149,7 @@ func Test_calcRuleDef(t *testing.T) {
 							BaseType: reflect.TypeOf(Token{}),
 							Array:    true,
 						},
-						ParseOptions: ParseOptions{
+						TokenOptions: TokenOptions{
 							TokenParseOptions: []TokenParseOptions{
 								{
 									TokenType: "int",
