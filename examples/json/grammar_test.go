@@ -59,10 +59,7 @@ func TestParse(t *testing.T) {
 				t:    s(op("["), op("]")),
 			},
 			want: &Json{
-				Array: &Array{
-					Open:  op("["),
-					Close: op("]"),
-				},
+				Array: &Array{},
 			},
 		},
 		{
@@ -73,11 +70,7 @@ func TestParse(t *testing.T) {
 			},
 			want: &Json{
 				Array: &Array{
-					Open: op("["),
-					ArrayBody: &ArrayBody{
-						First: Json{String: &String{Value: str("item")}},
-					},
-					Close: op("]"),
+					Items: []Json{{String: &String{Value: str("item")}}},
 				},
 			},
 		},
@@ -89,17 +82,10 @@ func TestParse(t *testing.T) {
 			},
 			want: &Json{
 				Array: &Array{
-					Open: op("["),
-					ArrayBody: &ArrayBody{
-						First: Json{String: &String{Value: str("item1")}},
-						Items: []ArrayItem{
-							{
-								Comma: op(","),
-								Value: Json{String: &String{Value: str("item2")}},
-							},
-						},
+					Items: []Json{
+						{String: &String{Value: str("item1")}},
+						{String: &String{Value: str("item2")}},
 					},
-					Close: op("]"),
 				},
 			},
 		},
@@ -111,15 +97,12 @@ func TestParse(t *testing.T) {
 			},
 			want: &Json{
 				Dict: &Dict{
-					Open: op("{"),
-					DictBody: &DictBody{
-						First: KeyValue{
+					Items: []DictItem{
+						{
 							Key:   String{Value: str("key1")},
-							Colon: op(":"),
 							Value: Json{String: &String{Value: str("val1")}},
 						},
 					},
-					Close: op("}"),
 				},
 			},
 		},
@@ -131,25 +114,16 @@ func TestParse(t *testing.T) {
 			},
 			want: &Json{
 				Dict: &Dict{
-					Open: op("{"),
-					DictBody: &DictBody{
-						First: KeyValue{
+					Items: []DictItem{
+						{
 							Key:   String{Value: str("key1")},
-							Colon: op(":"),
 							Value: Json{String: &String{Value: str("val1")}},
 						},
-						Items: []DictItem{
-							{
-								Comma: op(","),
-								KeyValue: KeyValue{
-									Key:   String{Value: str("key2")},
-									Colon: op(":"),
-									Value: Json{Number: &Number{Value: num("123")}},
-								},
-							},
+						{
+							Key:   String{Value: str("key2")},
+							Value: Json{Number: &Number{Value: num("123")}},
 						},
 					},
-					Close: op("}"),
 				},
 			},
 		},

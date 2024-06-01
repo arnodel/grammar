@@ -22,7 +22,7 @@ var TokeniseJsonString = grammar.SimpleTokeniser([]grammar.TokenDef{
 	},
 	{
 		Name: "string",
-		Ptn:  `"[^"]*"`,
+		Ptn:  `"[^"]*"`, // In reality strings are more complicated than this
 	},
 	{
 		Name: "number",

@@ -46,48 +46,22 @@ type Bool struct {
 // Array ::= "[" [ArrayBody] "]"
 type Array struct {
 	grammar.Seq
-	Open       Token `tok:"op,["` // This tells the parser a token of type "op" with value "[" should be used
-	*ArrayBody       // A pointer field is optional
-	Close      Token `tok:"op,]"`
-}
-
-// ArrayBody ::= Json ("," Json)*
-type ArrayBody struct {
-	grammar.Seq
-	First Json // A non-pointer field is compulsory
-	Items []ArrayItem
-}
-
-type ArrayItem struct {
-	grammar.Seq
-	Comma Token `tok:"op,,"`
-	Value Json
+	Open  grammar.Match `tok:"op,["` // This tells the parser a token of type "op" with value "[" should be used
+	Items []Json        `sep:"op,,"` // This tells the parse items should be separater by a token of type "op" with value ","
+	Close grammar.Match `tok:"op,]"`
 }
 
 // Dict ::= "{" [DictBody] "}"
 type Dict struct {
 	grammar.Seq
-	Open Token `tok:"op,{"`
-	*DictBody
-	Close Token `tok:"op,}"`
-}
-
-// DictBody ::= String ":" Json ("," String : Json)*
-type DictBody struct {
-	grammar.Seq
-	First KeyValue
-	Items []DictItem
-}
-
-type KeyValue struct {
-	grammar.Seq
-	Key   String
-	Colon Token `tok:"op,:"`
-	Value Json
+	Open  grammar.Match `tok:"op,{"`
+	Items []DictItem    `sep:"op,,"`
+	Close grammar.Match `tok:"op,}"`
 }
 
 type DictItem struct {
 	grammar.Seq
-	Comma Token `tok:"op,,"`
-	KeyValue
+	Key   String
+	Colon grammar.Match `tok:"op,:"`
+	Value Json
 }

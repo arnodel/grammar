@@ -53,24 +53,17 @@ func (b Bool) Compile() bool {
 }
 
 func (a Array) Compile() []interface{} {
-	if a.ArrayBody == nil {
-		return nil
-	}
-	ca := []interface{}{a.ArrayBody.First.Compile()}
-	for _, item := range a.ArrayBody.Items {
-		ca = append(ca, item.Value.Compile())
+	var ca []interface{}
+	for _, item := range a.Items {
+		ca = append(ca, item.Compile())
 	}
 	return ca
 }
 
 func (d Dict) Compile() map[string]interface{} {
-	if d.DictBody == nil {
-		return nil
-	}
 	cd := map[string]interface{}{}
-	cd[d.DictBody.First.Key.Compile()] = d.DictBody.First.Value.Compile()
-	for _, item := range d.DictBody.Items {
-		cd[item.KeyValue.Key.Compile()] = item.KeyValue.Value.Compile()
+	for _, item := range d.Items {
+		cd[item.Key.Compile()] = item.Value.Compile()
 	}
 	return cd
 }

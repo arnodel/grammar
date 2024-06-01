@@ -1,50 +1,10 @@
-package grammar_test
+package sexpr
 
 import (
 	"os"
 
 	"github.com/arnodel/grammar"
 )
-
-type Token = grammar.SimpleToken
-
-type SExpr struct {
-	grammar.OneOf
-	Number *Token `tok:"number"`
-	String *Token `tok:"string"`
-	Atom   *Token `tok:"atom"`
-	*List
-}
-
-type List struct {
-	grammar.Seq
-	OpenBkt  Token `tok:"bkt,("`
-	Items    []SExpr
-	CloseBkt Token `tok:"bkt,)"`
-}
-
-var tokenise = grammar.SimpleTokeniser([]grammar.TokenDef{
-	{
-		// If Name is empty, the token is skipped in the token stream
-		Ptn: `\s+`,
-	},
-	{
-		Name: "bkt",
-		Ptn:  `[()]`,
-	},
-	{
-		Name: "string",
-		Ptn:  `"[^"]*"`,
-	},
-	{
-		Name: "number",
-		Ptn:  `-?[0-9]+(?:\.[0-9]+)?`,
-	},
-	{
-		Name: "atom",
-		Ptn:  `[a-zA-Z_][a-zA-Z0-9_-]*`,
-	},
-})
 
 func Example() {
 	tokenStream, _ := tokenise(`(cons a (list 123 "c")))`)
@@ -55,7 +15,7 @@ func Example() {
 	// Output:
 	// SExpr {
 	//   List: List {
-	//     OpenBkt: {bkt (}
+	//     OpenBkt: {}
 	//     Items: [
 	//       SExpr {
 	//         Atom: {atom cons}
@@ -65,7 +25,7 @@ func Example() {
 	//       }
 	//       SExpr {
 	//         List: List {
-	//           OpenBkt: {bkt (}
+	//           OpenBkt: {}
 	//           Items: [
 	//             SExpr {
 	//               Atom: {atom list}
@@ -77,11 +37,11 @@ func Example() {
 	//               String: {string "c"}
 	//             }
 	//           ]
-	//           CloseBkt: {bkt )}
+	//           CloseBkt: {}
 	//         }
 	//       }
 	//     ]
-	//     CloseBkt: {bkt )}
+	//     CloseBkt: {}
 	//   }
 	// }
 }

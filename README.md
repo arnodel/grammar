@@ -1,7 +1,9 @@
 # grammar
 
 A parser generator where rules defined as go structs and code generation is
-optional.  The concepts are introduced in the simple example below.
+optional.  The concepts are introduced in the simple example below.  There are
+also examples in the [examples/](./examples/) directory, the most interesting
+being [examples/json](./examples/json/).
 
 ## Rules
 
@@ -20,22 +22,28 @@ type SExpr struct {
 
 // List ::= "(" [Item] ")"
 type List struct {
-    grammar.Seq             // This is a Sequence rule, all fields must match in a sequence
-    OpenBkt  Token `tok:"bkt,("`  // This "tok" tag means only "bkt" tokens with value "(" will match
-    Items []SExpr
-    CloseBkt Token `tok:"bkt,)`
+    grammar.Seq                           // This is a Sequence rule, all fields must match in a sequence
+    OpenBkt  grammar.Match `tok:"bkt,("`  // This "tok" tag means only "bkt" tokens with value "(" will match
+    Items    []SExpr
+    CloseBkt grammar.Match `tok:"bkt,)`
 }
 ```
 
+The `grammar.Match` type above is an empty struct, so it takes no space in the
+structure, but it only matches the token specification in the `tok` tag.
+
 ## Tokens
 
-This is not quite complete as you need a `Token` type.  You can create your own or if your needs are simple enough use `grammar.SimpleToken`:
+This is not quite complete as you need a `Token` type.  You can create your own
+or if your needs are simple enough use `grammar.SimpleToken`:
 
 ```golang
 type Token = grammar.SimpleToken
 ```
 
-In order to parse your s-exprs into the data structures aboves you also need a tokeniser.  You can make your own tokeniser or you can build one simply with the `grammar.SimpleTokeniser` function:
+In order to parse your s-exprs into the data structures aboves you also need a
+tokeniser.  You can make your own tokeniser or you can build one simply with the
+`grammar.SimpleTokeniser` function:
 
 ```golang
 var tokenise = grammar.SimpleTokeniser([]grammar.TokenDef{
@@ -88,7 +96,7 @@ This will output a pretty representation of `sexpr`:
 ```
 SExpr {
   List: List {
-    OpenBkt: {bkt (}
+    OpenBkt: {}
     Items: [
       SExpr {
         Atom: {atom cons}
@@ -98,7 +106,7 @@ SExpr {
       }
       SExpr {
         List: List {
-          OpenBkt: {bkt (}
+          OpenBkt: {}
           Items: [
             SExpr {
               Atom: {atom list}
@@ -110,16 +118,19 @@ SExpr {
               String: {string "c"}
             }
           ]
-          CloseBkt: {bkt )}
+          CloseBkt: {}
         }
       }
     ]
-    CloseBkt: {bkt )}
+    CloseBkt: {}
   }
 }
 ```
 
 ## Generating a parser
+
+WARNING: the parser generator is currently out of sync with the grammar
+definition, so don't use it :)
 
 The above works using reflection, which is fine but can be a little slow if you
 are parsing very big files.  It is also possible to compile a parser.

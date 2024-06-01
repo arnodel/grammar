@@ -5,7 +5,18 @@ import (
 	"reflect"
 )
 
+type Match struct{}
+
+var _ Parser = Match{}
+
+func (Match) Parse(r interface{}, s *ParserState, opts TokenOptions) *ParseError {
+	_, err := opts.MatchNextToken(s)
+	return err
+}
+
 type Empty struct{}
+
+var _ Parser = Empty{}
 
 func (Empty) Parse(r interface{}, s *ParserState, opts TokenOptions) *ParseError {
 	return nil
@@ -76,28 +87,6 @@ func (Seq) Parse(r interface{}, s *ParserState, opts TokenOptions) *ParseError {
 	ruleDef, elem := getRuleDefAndValue(r)
 	var err, fieldErr *ParseError
 	itemCount := 0
-	needsSeparator := false
-	var sep interface{}
-	var sepOptional bool
-	if ruleDef.Separator != nil {
-		sep = reflect.New(ruleDef.Separator.BaseType).Interface()
-		sepOptional = ruleDef.Separator.Pointer
-	}
-	parseSep := func() *ParseError {
-		if sep == nil || !needsSeparator {
-			return nil
-		}
-		start := s.Save()
-		sepErr := ParseWithOptions(sep, s, ruleDef.Separator.TokenOptions)
-		if sepErr != nil {
-			if !sepOptional {
-				return sepErr
-			}
-			s.Restore(start)
-		}
-		needsSeparator = false
-		return nil
-	}
 	var fieldPtrV reflect.Value
 	for _, ruleField := range ruleDef.Fields {
 		if s.Debug() {
@@ -107,20 +96,14 @@ func (Seq) Parse(r interface{}, s *ParserState, opts TokenOptions) *ParseError {
 		case ruleField.Pointer:
 			{
 				start := s.Save()
-				needsSeparatorAtStart := needsSeparator
-				fieldErr = parseSep()
-				if fieldErr == nil {
-					fieldPtrV = reflect.New(ruleField.BaseType)
-					fieldErr = ParseWithOptions(fieldPtrV.Interface(), s, ruleField.TokenOptions)
-				}
+				fieldPtrV = reflect.New(ruleField.BaseType)
+				fieldErr = ParseWithOptions(fieldPtrV.Interface(), s, ruleField.TokenOptions)
 				if fieldErr != nil {
 					err = err.Merge(fieldErr)
-					needsSeparator = needsSeparatorAtStart
 					s.Restore(start)
 				} else {
 					elem.Field(ruleField.Index).Set(fieldPtrV)
 					itemCount++
-					needsSeparator = true
 				}
 			}
 		case ruleField.Array:
@@ -129,39 +112,35 @@ func (Seq) Parse(r interface{}, s *ParserState, opts TokenOptions) *ParseError {
 				var sz int
 				for sz = 0; ruleField.Max == 0 || sz < ruleField.Max; sz++ {
 					start := s.Save()
-					needsSeparatorAtStart := needsSeparator
-					fieldErr = parseSep()
-					if fieldErr == nil {
-						fieldPtrV = reflect.New(ruleField.BaseType)
-						fieldErr = ParseWithOptions(fieldPtrV.Interface(), s, ruleField.TokenOptions)
-					}
+					fieldPtrV = reflect.New(ruleField.BaseType)
+					fieldErr = ParseWithOptions(fieldPtrV.Interface(), s, ruleField.TokenOptions)
 					if fieldErr != nil {
 						err = err.Merge(fieldErr)
 						if sz < ruleField.Min {
 							return err
 						}
-						needsSeparator = needsSeparatorAtStart
 						s.Restore(start)
 						break
 					}
 					itemsV = reflect.Append(itemsV, fieldPtrV.Elem())
 					itemCount++
-					needsSeparator = true
+					start = s.Save()
+					_, err := ruleField.SepOptions.MatchNextToken(s)
+					if err != nil {
+						s.Restore(start)
+						break
+					}
 				}
 				elem.Field(ruleField.Index).Set(itemsV)
 			}
 		default:
-			fieldErr = parseSep()
-			if fieldErr == nil {
-				fieldPtrV = reflect.New(ruleField.BaseType)
-				fieldErr = ParseWithOptions(fieldPtrV.Interface(), s, ruleField.TokenOptions)
-			}
+			fieldPtrV = reflect.New(ruleField.BaseType)
+			fieldErr = ParseWithOptions(fieldPtrV.Interface(), s, ruleField.TokenOptions)
 			if fieldErr != nil {
 				return err.Merge(fieldErr)
 			}
 			elem.Field(ruleField.Index).Set(fieldPtrV.Elem())
 			itemCount++
-			needsSeparator = true
 		}
 	}
 	if itemCount == 0 {

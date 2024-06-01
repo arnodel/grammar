@@ -40,20 +40,9 @@ func (t SimpleToken) Value() string {
 // with the token data, if not a non-nil *ParseError is returned.  In any event
 // the next token in the token stream has been consumed.
 func (t *SimpleToken) Parse(_ interface{}, s *ParserState, opts TokenOptions) *ParseError {
-	pos := s.Save()
-	tok := s.Next()
-	ok, doNotConsume := opts.MatchToken(tok)
-	if !ok {
-		parseErr := &ParseError{
-			Token:             tok,
-			TokenParseOptions: opts.TokenParseOptions,
-			Pos:               pos,
-		}
-		// log.Printf("!!! Token Parse Error: %s", parseErr)
-		return parseErr
-	}
-	if doNotConsume {
-		s.Restore(pos)
+	tok, err := opts.MatchNextToken(s)
+	if err != nil {
+		return err
 	}
 	t.TokType = tok.Type()
 	t.TokValue = tok.Value()

@@ -19,8 +19,9 @@ type RuleField struct {
 	FieldType
 	TokenOptions
 	SizeOptions
-	Name  string
-	Index int
+	SepOptions TokenOptions
+	Name       string
+	Index      int
 }
 
 type FieldType struct {
@@ -57,10 +58,13 @@ type SizeOptions struct {
 	Min, Max int
 }
 
-func (o TokenOptions) MatchToken(tok Token) (bool, bool) {
+func (o TokenOptions) MatchNextToken(s TokenStream) (Token, *ParseError) {
 	if len(o.TokenParseOptions) == 0 {
-		return true, false
+		return SimpleToken{}, nil
 	}
+	pos := s.Save()
+	tok := s.Next()
+
 	for _, opts := range o.TokenParseOptions {
 		if opts.TokenType != "" && opts.TokenType != tok.Type() {
 			continue
@@ -70,9 +74,16 @@ func (o TokenOptions) MatchToken(tok Token) (bool, bool) {
 			continue
 			// return fmt.Errorf("expected token with value %q", opts.TokenValue)
 		}
-		return true, opts.DoNotConsume
+		if opts.DoNotConsume {
+			s.Restore(pos)
+		}
+		return tok, nil
 	}
-	return false, false
+	return tok, &ParseError{
+		Token:             tok,
+		TokenParseOptions: o.TokenParseOptions,
+		Pos:               pos,
+	}
 }
 
 func getRuleDefAndValue(r interface{}) (*RuleDef, reflect.Value) {
@@ -138,6 +149,7 @@ func calcRuleDef(tp reflect.Type) (*RuleDef, error) {
 		}
 		ruleField := RuleField{
 			TokenOptions: tokenOptionsFromTagValue(field.Tag.Get("tok")),
+			SepOptions:   tokenOptionsFromTagValue(field.Tag.Get("sep")),
 			SizeOptions:  sizeOpts,
 			Name:         field.Name,
 			Index:        fieldIndex,
