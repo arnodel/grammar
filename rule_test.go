@@ -25,6 +25,22 @@ func Test_calcRuleDef(t *testing.T) {
 		B []Rule2
 	}
 
+	type SepRule struct{}
+
+	type SeqRuleWithSeparator struct {
+		Seq
+		Separator SepRule
+		Items     []Rule1
+	}
+
+	type Token struct{}
+
+	type RuleWithTokens struct {
+		Seq
+		Separator Token   `tok:"op,,"`
+		Items     []Token `tok:"int"`
+	}
+
 	tests := []struct {
 		name    string
 		args    args
@@ -81,6 +97,69 @@ func Test_calcRuleDef(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "Sequence with separator",
+			args: args{tp: reflect.TypeOf(SeqRuleWithSeparator{})},
+			want: &RuleDef{
+				Name: "SeqRuleWithSeparator",
+				Separator: &RuleField{
+					Index: 1,
+					Name:  "Separator",
+					FieldType: FieldType{
+						BaseType: reflect.TypeOf(SepRule{}),
+					},
+				},
+				Fields: []RuleField{
+					{
+						Index: 2,
+						Name:  "Items",
+						FieldType: FieldType{
+							BaseType: reflect.TypeOf(Rule1{}),
+							Array:    true,
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "Rule with tokens",
+			args: args{tp: reflect.TypeOf(RuleWithTokens{})},
+			want: &RuleDef{
+				Name: "RuleWithTokens",
+				Separator: &RuleField{
+					Index: 1,
+					Name:  "Separator",
+					FieldType: FieldType{
+						BaseType: reflect.TypeOf(Token{}),
+					},
+					ParseOptions: ParseOptions{
+						TokenParseOptions: []TokenParseOptions{
+							{
+								TokenType:  "op",
+								TokenValue: ",",
+							},
+						},
+					},
+				},
+				Fields: []RuleField{
+					{
+						Index: 2,
+						Name:  "Items",
+						FieldType: FieldType{
+							BaseType: reflect.TypeOf(Token{}),
+							Array:    true,
+						},
+						ParseOptions: ParseOptions{
+							TokenParseOptions: []TokenParseOptions{
+								{
+									TokenType: "int",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
 		// TODO: Add test cases.
 	}
 	for _, tt := range tests {
@@ -91,7 +170,7 @@ func Test_calcRuleDef(t *testing.T) {
 				return
 			}
 			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("calcRuleDef() = %v, want %v", got, tt.want)
+				t.Errorf("calcRuleDef() = %v,\nwant %v", got, tt.want)
 			}
 		})
 	}
