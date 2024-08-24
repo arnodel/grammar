@@ -4,14 +4,19 @@ import "github.com/arnodel/grammar"
 
 type Token = grammar.SimpleToken
 
-// SJSON stands for Simplified JSON as strings and numbers are simplified.
-type SJSON struct {
-	grammar.OneOf
-	Number  *Token `tok:"number"`
-	String  *Token `tok:"string"`
-	Boolean *Token `tok:"bool"`
-	*List
-	*Object
+type Number struct {
+	grammar.Seq
+	Tok Token `tok:"number"`
+}
+
+type String struct {
+	grammar.Seq
+	Tok Token `tok:"string"`
+}
+
+type Boolean struct {
+	grammar.Seq
+	Tok Token `tok:"bool"`
 }
 
 type List struct {
@@ -34,6 +39,17 @@ type Pair struct {
 	Colon grammar.Match `tok:"op,:"`
 	Value SJSON
 }
+
+// SJSON stands for Simplified JSON as strings and numbers are simplified.
+type SJSON = grammar.OneOf5[
+	Number,
+	String,
+	Boolean,
+	List,
+	Object,
+]
+
+var _ grammar.Parser = &SJSON{}
 
 var tokenise = grammar.SimpleTokeniser([]grammar.TokenDef{
 	{
