@@ -15,33 +15,29 @@ func Example() {
 	// Output:
 	// SExpr {
 	//   List: List {
-	//     OpenBkt: {}
 	//     Items: [
 	//       SExpr {
-	//         Atom: {atom cons}
+	//         Atom: atom = "cons"
 	//       }
 	//       SExpr {
-	//         Atom: {atom a}
+	//         Atom: atom = "a"
 	//       }
 	//       SExpr {
 	//         List: List {
-	//           OpenBkt: {}
 	//           Items: [
 	//             SExpr {
-	//               Atom: {atom list}
+	//               Atom: atom = "list"
 	//             }
 	//             SExpr {
-	//               Number: {number 123}
+	//               Number: number = "123"
 	//             }
 	//             SExpr {
-	//               String: {string "c"}
+	//               String: string = "\"c\""
 	//             }
 	//           ]
-	//           CloseBkt: {}
 	//         }
 	//       }
 	//     ]
-	//     CloseBkt: {}
 	//   }
 	// }
 }

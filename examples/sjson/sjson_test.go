@@ -13,22 +13,18 @@ func ExampleList() {
 	grammar.PrettyWrite(os.Stdout, json)
 
 	// Output:
-	// SJSON {
-	//   List: List {
-	//     Open: {}
-	//     Items: [
-	//       SJSON {
-	//         Number: {number 1}
-	//       }
-	//       SJSON {
-	//         Number: {number 2}
-	//       }
-	//       SJSON {
-	//         Number: {number 3}
-	//       }
-	//     ]
-	//     Close: {}
-	//   }
+	// List {
+	//   Items: [
+	//     Number {
+	//       Tok: number = "1"
+	//     }
+	//     Number {
+	//       Tok: number = "2"
+	//     }
+	//     Number {
+	//       Tok: number = "3"
+	//     }
+	//   ]
 	// }
 
 }
@@ -47,55 +43,38 @@ func ExampleObject() {
 	grammar.PrettyWrite(os.Stdout, json)
 
 	// Output:
-	// SJSON {
-	//   Object: Object {
-	//     Open: {}
-	//     Items: [
-	//       Pair {
-	//         Key: {string "name"}
-	//         Colon: {}
-	//         Value: SJSON {
-	//           String: {string "Bob"}
-	//         }
+	// Object {
+	//   Items: [
+	//     Pair {
+	//       Key: string = "\"name\""
+	//       Value: String {
+	//         Tok: string = "\"Bob\""
 	//       }
-	//       Pair {
-	//         Key: {string "score"}
-	//         Colon: {}
-	//         Value: SJSON {
-	//           Number: {number 999}
-	//         }
+	//     }
+	//     Pair {
+	//       Key: string = "\"score\""
+	//       Value: Number {
+	//         Tok: number = "999"
 	//       }
-	//       Pair {
-	//         Key: {string "awards"}
-	//         Colon: {}
-	//         Value: SJSON {
-	//           List: List {
-	//             Open: {}
-	//             Items: [
-	//               SJSON {
-	//                 String: {string "fast"}
-	//               }
-	//               SJSON {
-	//                 String: {string "blob"}
-	//               }
-	//             ]
-	//             Close: {}
+	//     }
+	//     Pair {
+	//       Key: string = "\"awards\""
+	//       Value: List {
+	//         Items: [
+	//           String {
+	//             Tok: string = "\"fast\""
 	//           }
-	//         }
-	//       }
-	//       Pair {
-	//         Key: {string "penalties"}
-	//         Colon: {}
-	//         Value: SJSON {
-	//           List: List {
-	//             Open: {}
-	//             Close: {}
+	//           String {
+	//             Tok: string = "\"blob\""
 	//           }
-	//         }
+	//         ]
 	//       }
-	//     ]
-	//     Close: {}
-	//   }
+	//     }
+	//     Pair {
+	//       Key: string = "\"penalties\""
+	//       Value: List {
+	//       }
+	//     }
+	//   ]
 	// }
-
 }

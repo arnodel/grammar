@@ -1,3 +1,3 @@
 module github.com/arnodel/grammar
 
-go 1.16
+go 1.23

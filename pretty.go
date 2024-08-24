@@ -27,13 +27,24 @@ import (
 //	}
 //
 // Empty optional fields and empty repeated fields are omitted altogether.
+
+type PrettyWriter interface {
+	PrettyWrite(out io.Writer, pfx string, indent int) (err error)
+}
+
 func PrettyWrite(out io.Writer, r interface{}) error {
 	return prettyWrite(out, r, "", 0)
 }
 
 func prettyWrite(out io.Writer, r interface{}, pfx string, indent int) (err error) {
-	ruleDef, err := getRuleDef(reflect.TypeOf(r))
+	if pw, ok := r.(PrettyWriter); ok {
+		return pw.PrettyWrite(out, pfx, indent)
+	}
 	rV := reflect.ValueOf(r)
+	if rV.Kind() == reflect.Pointer {
+		return prettyWrite(out, rV.Elem().Interface(), pfx, indent)
+	}
+	ruleDef, err := getRuleDef(reflect.TypeOf(r))
 	if err != nil {
 		return writeLine(out, pfx, indent, r)
 	}
@@ -66,9 +77,9 @@ func prettyWrite(out io.Writer, r interface{}, pfx string, indent int) (err erro
 
 func writeLine(out io.Writer, pfx string, indent int, val interface{}) (err error) {
 	if pfx != "" {
-		_, err = fmt.Fprintf(out, "%s%s: %v\n", strings.Repeat(" ", indent), pfx, val)
+		_, err = fmt.Fprintf(out, "%s%s: %s\n", strings.Repeat(" ", indent), pfx, val)
 	} else {
-		_, err = fmt.Fprintf(out, "%s%v\n", strings.Repeat(" ", indent), val)
+		_, err = fmt.Fprintf(out, "%s%s\n", strings.Repeat(" ", indent), val)
 	}
 	return
 }

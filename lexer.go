@@ -35,6 +35,10 @@ func (t SimpleToken) Value() string {
 	return t.TokValue
 }
 
+func (t SimpleToken) PrettyWrite(out io.Writer, pfx string, indent int) (err error) {
+	return writeLine(out, pfx, indent, fmt.Sprintf("%s = %q", t.TokType, t.TokValue))
+}
+
 // Parse tries to match the next token in the given TokenStream with the
 // ParseOptions, using opts.MatchToken.  If they match, the receiver is loaded
 // with the token data, if not a non-nil *ParseError is returned.  In any event
