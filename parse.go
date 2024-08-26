@@ -37,8 +37,9 @@ type Parser interface {
 // A Token has a Type() and Value() method. A TokenStream's Next() method must
 // return a Token.
 type Token interface {
-	Type() string  // The type of the token (e.g. operator, number, string, identifier)
-	Value() string // The value of the token(e.g. `+`, `123`, `"abc"`, `if`)
+	Type() string       // The type of the token (e.g. operator, number, string, identifier)
+	Value() string      // The value of the token(e.g. `+`, `123`, `"abc"`, `if`)
+	Position() Position // The position of the token in the source text
 }
 
 // A TokenStream represents a sequence of tokens that will be consumed by the
@@ -142,7 +143,7 @@ func (e *ParseError) Error() string {
 		}
 		hint = b.String()
 	}
-	return fmt.Sprintf("token #%d %s with value %q: %s", e.Pos, e.Token.Type(), e.Token.Value(), hint)
+	return fmt.Sprintf("%s: %s with value %q: %s", e.Token.Position(), e.Token.Type(), e.Token.Value(), hint)
 }
 
 func summariseOptions(opts []TokenParseOptions) ([]string, []string) {
