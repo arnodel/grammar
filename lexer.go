@@ -5,7 +5,32 @@ import (
 	"fmt"
 	"io"
 	"regexp"
+	"strings"
 )
+
+type Position struct {
+	Line, Column int
+}
+
+func (p *Position) Advance(s string) {
+	for len(s) > 0 {
+		i := strings.IndexAny(s, "\r\n")
+		if i == -1 {
+			p.Column += len([]rune(s))
+			return
+		}
+		p.Column = 1
+		p.Line++
+		if s[0] == '\r' && len(s) > 1 && s[1] == '\n' {
+			i++
+		}
+		s = s[i+1:]
+	}
+}
+
+func (p Position) String() string {
+	return fmt.Sprintf("Ln %d, Col %d", p.Line, p.Column)
+}
 
 // SimpleToken is a simple implementation of the both the Token and the Parser
 // interfaces.  So it can be used in rules to match a token field.  It is also
@@ -13,10 +38,12 @@ import (
 type SimpleToken struct {
 	TokType  string
 	TokValue string
+	TokPos   Position
 }
 
 var _ Token = SimpleToken{}
 var _ Parser = &SimpleToken{}
+var _ PrettyWriter = SimpleToken{}
 
 // EOF is the token that is returned when trying to consument an exhausted token
 // stream.
@@ -35,8 +62,12 @@ func (t SimpleToken) Value() string {
 	return t.TokValue
 }
 
+func (t SimpleToken) Position() Position {
+	return t.TokPos
+}
+
 func (t SimpleToken) PrettyWrite(out io.Writer, pfx string, indent int) (err error) {
-	return writeLine(out, pfx, indent, fmt.Sprintf("%s = %q", t.TokType, t.TokValue))
+	return writeLine(out, pfx, indent, fmt.Sprintf("%s = %q %s", t.TokType, t.TokValue, t.TokPos))
 }
 
 // Parse tries to match the next token in the given TokenStream with the
@@ -50,6 +81,7 @@ func (t *SimpleToken) Parse(_ interface{}, s *ParserState, opts TokenOptions) *P
 	}
 	t.TokType = tok.Type()
 	t.TokValue = tok.Value()
+	t.TokPos = tok.Position()
 	// log.Printf("+++ parsed tok #%d: (%s, %q)", pos, t.TokType, t.TokValue)
 	return nil
 }
@@ -143,10 +175,11 @@ func SimpleTokeniser(tokenDefs []TokenDef) func(string) (*SimpleTokenStream, err
 		mode := initialMode
 		var prevModes []string
 		var toks []Token
+		pos := Position{Line: 1, Column: 1}
 		for len(s) > 0 {
 			matches := ptns[mode].FindStringSubmatch(s)
 			if matches == nil {
-				return nil, fmt.Errorf("invalid input string")
+				return nil, fmt.Errorf("invalid token starting at %v", pos)
 			}
 			tokType := ""
 			tokValue := matches[0]
@@ -173,9 +206,10 @@ func SimpleTokeniser(tokenDefs []TokenDef) func(string) (*SimpleTokenStream, err
 				}
 			}
 			if tokType != "" {
-				toks = append(toks, SimpleToken{TokType: tokType, TokValue: tokValue})
+				toks = append(toks, SimpleToken{TokType: tokType, TokValue: tokValue, TokPos: pos})
 			}
 			s = s[len(tokValue):]
+			pos.Advance(tokValue)
 		}
 		return &SimpleTokenStream{tokens: toks}, nil
 	}
