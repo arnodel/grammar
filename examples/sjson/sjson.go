@@ -2,21 +2,16 @@ package sjson
 
 import "github.com/arnodel/grammar"
 
-type Token = grammar.SimpleToken
-
 type Number struct {
-	grammar.Seq
-	Tok Token `tok:"number"`
+	grammar.Tok `tok:"number"`
 }
 
 type String struct {
-	grammar.Seq
-	Tok Token `tok:"string"`
+	grammar.Tok `tok:"string"`
 }
 
 type Boolean struct {
-	grammar.Seq
-	Tok Token `tok:"bool"`
+	grammar.Tok `tok:"bool"`
 }
 
 type List struct {
@@ -35,7 +30,7 @@ type Object struct {
 
 type Pair struct {
 	grammar.Seq
-	Key   Token         `tok:"string"`
+	Key   grammar.Tok   `tok:"string"`
 	Colon grammar.Match `tok:"op,:"`
 	Value SJSON
 }

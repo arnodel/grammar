@@ -10,7 +10,7 @@ func Example() {
 	tokenStream, _ := tokenise(`(cons a (list 123 "c")))`)
 	var sexpr SExpr
 	grammar.Parse(&sexpr, tokenStream)
-	grammar.PrettyWrite(os.Stdout, sexpr)
+	grammar.PrettyWrite(os.Stdout, &sexpr)
 
 	// Output:
 	// SExpr {

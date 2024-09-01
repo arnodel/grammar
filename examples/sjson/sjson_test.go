@@ -9,8 +9,8 @@ import (
 func ExampleList() {
 	tokenStream, _ := tokenise(`[1, 2, 3]`)
 	var json SJSON
-	grammar.Parse(&json, tokenStream)
-	grammar.PrettyWrite(os.Stdout, json)
+	grammar.Parse(&json, tokenStream) //, grammar.WithDefaultLogger)
+	grammar.PrettyWrite(os.Stdout, &json)
 
 	// Output:
 	// List {
@@ -40,7 +40,7 @@ func ExampleObject() {
     `)
 	var json SJSON
 	grammar.Parse(&json, tokenStream)
-	grammar.PrettyWrite(os.Stdout, json)
+	grammar.PrettyWrite(os.Stdout, &json)
 
 	// Output:
 	// Object {

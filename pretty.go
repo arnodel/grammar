@@ -3,7 +3,6 @@ package grammar
 import (
 	"fmt"
 	"io"
-	"reflect"
 	"strings"
 )
 
@@ -29,25 +28,22 @@ import (
 // Empty optional fields and empty repeated fields are omitted altogether.
 
 type PrettyWriter interface {
-	PrettyWrite(out io.Writer, pfx string, indent int) (err error)
+	PrettyWrite(out io.Writer, r any, pfx string, indent int) (err error)
 }
 
-func PrettyWrite(out io.Writer, r interface{}) error {
+func PrettyWrite(out io.Writer, r any) error {
 	return prettyWrite(out, r, "", 0)
 }
 
-func prettyWrite(out io.Writer, r interface{}, pfx string, indent int) (err error) {
+func prettyWrite(out io.Writer, r any, pfx string, indent int) (err error) {
 	if pw, ok := r.(PrettyWriter); ok {
-		return pw.PrettyWrite(out, pfx, indent)
+		return pw.PrettyWrite(out, r, pfx, indent)
 	}
-	rV := reflect.ValueOf(r)
-	if rV.Kind() == reflect.Pointer {
-		return prettyWrite(out, rV.Elem().Interface(), pfx, indent)
-	}
-	ruleDef, err := getRuleDef(reflect.TypeOf(r))
-	if err != nil {
-		return writeLine(out, pfx, indent, r)
-	}
+	return prettyWriteStruct(out, r, pfx, indent)
+}
+
+func prettyWriteStruct(out io.Writer, r any, pfx string, indent int) (err error) {
+	ruleDef, rV := getRuleDefAndValue(r)
 	err = writeLine(out, pfx, indent, ruleDef.Name+" {")
 	if err != nil {
 		return
@@ -57,18 +53,18 @@ func prettyWrite(out io.Writer, r interface{}, pfx string, indent int) (err erro
 		switch {
 		case ruleField.Pointer:
 			if !fieldV.IsNil() {
-				prettyWrite(out, fieldV.Elem().Interface(), ruleField.Name, indent+2)
+				prettyWrite(out, fieldV.Interface(), ruleField.Name, indent+2)
 			}
 		case ruleField.Array:
 			if fieldV.Len() > 0 {
 				writeLine(out, ruleField.Name, indent+2, "[")
 				for i := 0; i < fieldV.Len(); i++ {
-					prettyWrite(out, fieldV.Index(i).Interface(), "", indent+4)
+					prettyWrite(out, fieldV.Index(i).Addr().Interface(), "", indent+4)
 				}
 				writeLine(out, "", indent+2, "]")
 			}
 		default:
-			prettyWrite(out, fieldV.Interface(), ruleField.Name, indent+2)
+			prettyWrite(out, fieldV.Addr().Interface(), ruleField.Name, indent+2)
 		}
 	}
 	writeLine(out, "", indent, "}")

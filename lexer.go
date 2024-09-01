@@ -66,7 +66,7 @@ func (t SimpleToken) Position() Position {
 	return t.TokPos
 }
 
-func (t SimpleToken) PrettyWrite(out io.Writer, pfx string, indent int) (err error) {
+func (t SimpleToken) PrettyWrite(out io.Writer, r any, pfx string, indent int) (err error) {
 	return writeLine(out, pfx, indent, fmt.Sprintf("%s = %q %s", t.TokType, t.TokValue, t.TokPos))
 }
 

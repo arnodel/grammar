@@ -9,21 +9,27 @@ import (
 type Match struct{}
 
 var _ Parser = Match{}
+var _ PrettyWriter = Match{}
 
 func (Match) Parse(r interface{}, s *ParserState, opts TokenOptions) *ParseError {
 	_, err := opts.MatchNextToken(s)
 	return err
 }
 
-func (Match) PrettyWrite(out io.Writer, pfx string, indent int) (err error) {
+func (Match) PrettyWrite(out io.Writer, r any, pfx string, indent int) (err error) {
 	return nil
 }
 
 type Empty struct{}
 
 var _ Parser = Empty{}
+var _ PrettyWriter = Empty{}
 
 func (Empty) Parse(r interface{}, s *ParserState, opts TokenOptions) *ParseError {
+	return nil
+}
+
+func (Empty) PrettyWrite(out io.Writer, r any, pfx string, indent int) (err error) {
 	return nil
 }
 
@@ -31,7 +37,7 @@ func (Empty) Parse(r interface{}, s *ParserState, opts TokenOptions) *ParseError
 // should match exactly one of the fields
 type OneOf struct{}
 
-var _ Parser = OneOf{}
+var _ Parser = &OneOf{}
 
 func (OneOf) Parse(r interface{}, s *ParserState, opts TokenOptions) *ParseError {
 	ruleDef, elem := getRuleDefAndValue(r)
@@ -87,7 +93,7 @@ func (OneOf) Parse(r interface{}, s *ParserState, opts TokenOptions) *ParseError
 // should match all the fields in sequence.
 type Seq struct{}
 
-var _ Parser = Seq{}
+var _ Parser = &Seq{}
 
 func (Seq) Parse(r interface{}, s *ParserState, opts TokenOptions) *ParseError {
 	ruleDef, elem := getRuleDefAndValue(r)
@@ -161,4 +167,27 @@ func (Seq) Parse(r interface{}, s *ParserState, opts TokenOptions) *ParseError {
 		}
 	}
 	return nil
+}
+
+type Tok struct {
+	SimpleToken
+}
+
+var _ Parser = &Tok{}
+var _ PrettyWriter = &Tok{}
+
+func (t *Tok) Parse(r any, s *ParserState, opts TokenOptions) *ParseError {
+	if r == t {
+		return t.SimpleToken.Parse(r, s, opts)
+	}
+	ruleDef, _ := getRuleDefAndValue(r)
+	ruleField := ruleDef.Fields[0]
+	return t.SimpleToken.Parse(r, s, ruleField.TokenOptions)
+}
+
+func (t *Tok) PrettyWrite(out io.Writer, r any, pfx string, indent int) error {
+	if r == t {
+		return t.SimpleToken.PrettyWrite(out, t, pfx, indent)
+	}
+	return prettyWriteStruct(out, r, pfx, indent)
 }
