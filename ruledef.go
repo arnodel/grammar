@@ -89,12 +89,12 @@ func (o TokenOptions) MatchNextToken(s TokenStream) (Token, *ParseError) {
 func getRuleDefAndValue(r interface{}) (*RuleDef, reflect.Value) {
 	rV := reflect.ValueOf(r)
 	if rV.Kind() != reflect.Ptr {
-		panic("dest must be a pointer")
+		panic(fmt.Sprintf("dest must be a pointer, it is %T", r))
 	}
 	elem := rV.Elem()
 	tp := elem.Type()
 	if tp.Kind() != reflect.Struct {
-		panic("dest must point to a struct")
+		panic(fmt.Sprintf("dest must point to a struct, it is %T", r))
 	}
 	ruleDef, ruleErr := getRuleDef(tp)
 	if ruleErr != nil {
@@ -125,19 +125,24 @@ var ruleDefCache = map[reflect.Type]ruleDefCacheValue{}
 
 func calcRuleDef(tp reflect.Type) (*RuleDef, error) {
 	if tp.Kind() != reflect.Struct {
-		return nil, errors.New("type should be a struct")
+		return nil, fmt.Errorf("rule type %s should be a struct", tp)
 	}
 	numField := tp.NumField()
 	if numField == 0 {
-		return nil, errors.New("type should have at least one field")
+		return nil, fmt.Errorf("rule type %s should have at least one field", tp)
 	}
 	firstFieldIndex := 0
 	oneOf := tp.Field(0).Type == reflect.TypeOf(OneOf{})
 	seq := tp.Field(0).Type == reflect.TypeOf(Seq{})
+	tok := tp.Field(0).Type == reflect.TypeOf(Tok{})
 	if oneOf || seq {
 		firstFieldIndex++
+	} else if tok {
+		if numField > 1 {
+			return nil, fmt.Errorf("Tok rule type %s must have exactly one field", tp)
+		}
 	} else {
-		return nil, errors.New("first rule field should be OneOf or Seq")
+		return nil, fmt.Errorf("first field of rule type %s should be OneOf or Seq or Tok", tp)
 	}
 	var separatorField *RuleField
 	var ruleFields []RuleField

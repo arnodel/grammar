@@ -6,7 +6,7 @@ type OneOfValue struct {
 	Value any
 }
 
-func (o OneOfValue) PrettyWrite(out io.Writer, pfx string, indent int) (err error) {
+func (o *OneOfValue) PrettyWrite(out io.Writer, r any, pfx string, indent int) (err error) {
 	return prettyWrite(out, o.Value, pfx, indent)
 }
 
@@ -33,7 +33,7 @@ type OneOf2[T1, T2 Parser] struct {
 }
 
 var _ Parser = &OneOf2[Empty, Empty]{}
-var _ PrettyWriter = OneOf2[Empty, Empty]{}
+var _ PrettyWriter = &OneOf2[Empty, Empty]{}
 
 func (o *OneOf2[T1, T2]) Parse(r any, s *ParserState, opts TokenOptions) *ParseError {
 	p := optionParser{OneOfValue: &o.OneOfValue}
@@ -47,7 +47,7 @@ type OneOf3[T1, T2, T3 Parser] struct {
 }
 
 var _ Parser = &OneOf3[Empty, Empty, Empty]{}
-var _ PrettyWriter = OneOf3[Empty, Empty, Empty]{}
+var _ PrettyWriter = &OneOf3[Empty, Empty, Empty]{}
 
 func (o *OneOf3[T1, T2, T3]) Parse(r any, s *ParserState, opts TokenOptions) *ParseError {
 	p := optionParser{OneOfValue: &o.OneOfValue}
@@ -62,7 +62,7 @@ type OneOf4[T1, T2, T3, T4 Parser] struct {
 }
 
 var _ Parser = &OneOf4[Empty, Empty, Empty, Empty]{}
-var _ PrettyWriter = OneOf4[Empty, Empty, Empty, Empty]{}
+var _ PrettyWriter = &OneOf4[Empty, Empty, Empty, Empty]{}
 
 func (o *OneOf4[T1, T2, T3, T4]) Parse(r any, s *ParserState, opts TokenOptions) *ParseError {
 	p := optionParser{OneOfValue: &o.OneOfValue}
@@ -73,12 +73,12 @@ func (o *OneOf4[T1, T2, T3, T4]) Parse(r any, s *ParserState, opts TokenOptions)
 	return p.err
 }
 
-type OneOf5[T1, T2, T3, T4, T5 Parser] struct {
+type OneOf5[T1, T2, T3, T4, T5 any] struct {
 	OneOfValue
 }
 
-var _ Parser = &OneOf5[Empty, Empty, Empty, Empty, Empty]{}
-var _ PrettyWriter = OneOf5[Empty, Empty, Empty, Empty, Empty]{}
+var _ Parser = &OneOf5[any, any, any, any, any]{}
+var _ PrettyWriter = &OneOf5[any, any, any, any, any]{}
 
 func (o *OneOf5[T1, T2, T3, T4, T5]) Parse(r any, s *ParserState, opts TokenOptions) *ParseError {
 	p := optionParser{OneOfValue: &o.OneOfValue}
