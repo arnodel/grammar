@@ -31,6 +31,7 @@ var _ Parser = OneOf{}
 func (OneOf) Parse(r interface{}, s *ParserState, opts TokenOptions) *ParseError {
 	ruleDef, elem := getRuleDefAndValue(r)
 	var err, fieldErr *ParseError
+	ruleDef.DropOptions.DropMatchingNextTokens(s)
 	for _, ruleField := range ruleDef.Fields {
 		switch {
 		case ruleField.Pointer:
@@ -88,10 +89,12 @@ func (Seq) Parse(r interface{}, s *ParserState, opts TokenOptions) *ParseError {
 	var err, fieldErr *ParseError
 	itemCount := 0
 	var fieldPtrV reflect.Value
+	dropOptions := ruleDef.DropOptions
 	for _, ruleField := range ruleDef.Fields {
 		if s.Debug() {
 			s.Logf("  .%s tok #%d", ruleField.Name, s.Save())
 		}
+		dropOptions.DropMatchingNextTokens(s)
 		switch {
 		case ruleField.Pointer:
 			{

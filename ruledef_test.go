@@ -20,25 +20,21 @@ func Test_calcRuleDef(t *testing.T) {
 	}
 
 	type SeqRule struct {
-		Seq
-		A Rule1
-		B []Rule2
+		Seq `drop:"spc"`
+		A   Rule1
+		B   []Rule2
 	}
-
-	type SepRule struct{}
 
 	type SeqRuleWithSeparator struct {
 		Seq
-		Separator SepRule
-		Items     []Rule1
+		Items []Rule1 `sep:"op,,"`
 	}
 
 	type Token struct{}
 
 	type RuleWithTokens struct {
 		Seq
-		Separator Token   `tok:"op,,"`
-		Items     []Token `tok:"int"`
+		Items []Token `tok:"int" sep:"op,,"`
 	}
 
 	tests := []struct {
@@ -78,6 +74,13 @@ func Test_calcRuleDef(t *testing.T) {
 			args: args{tp: reflect.TypeOf(SeqRule{})},
 			want: &RuleDef{
 				Name: "SeqRule",
+				DropOptions: TokenOptions{
+					TokenParseOptions: []TokenParseOptions{
+						{
+							TokenType: "spc",
+						},
+					},
+				},
 				Fields: []RuleField{
 					{
 						Index: 1,
@@ -102,20 +105,21 @@ func Test_calcRuleDef(t *testing.T) {
 			args: args{tp: reflect.TypeOf(SeqRuleWithSeparator{})},
 			want: &RuleDef{
 				Name: "SeqRuleWithSeparator",
-				Separator: &RuleField{
-					Index: 1,
-					Name:  "Separator",
-					FieldType: FieldType{
-						BaseType: reflect.TypeOf(SepRule{}),
-					},
-				},
 				Fields: []RuleField{
 					{
-						Index: 2,
+						Index: 1,
 						Name:  "Items",
 						FieldType: FieldType{
 							BaseType: reflect.TypeOf(Rule1{}),
 							Array:    true,
+						},
+						SepOptions: TokenOptions{
+							TokenParseOptions: []TokenParseOptions{
+								{
+									TokenType:  "op",
+									TokenValue: ",",
+								},
+							},
 						},
 					},
 				},
@@ -126,24 +130,9 @@ func Test_calcRuleDef(t *testing.T) {
 			args: args{tp: reflect.TypeOf(RuleWithTokens{})},
 			want: &RuleDef{
 				Name: "RuleWithTokens",
-				Separator: &RuleField{
-					Index: 1,
-					Name:  "Separator",
-					FieldType: FieldType{
-						BaseType: reflect.TypeOf(Token{}),
-					},
-					TokenOptions: TokenOptions{
-						TokenParseOptions: []TokenParseOptions{
-							{
-								TokenType:  "op",
-								TokenValue: ",",
-							},
-						},
-					},
-				},
 				Fields: []RuleField{
 					{
-						Index: 2,
+						Index: 1,
 						Name:  "Items",
 						FieldType: FieldType{
 							BaseType: reflect.TypeOf(Token{}),
@@ -153,6 +142,14 @@ func Test_calcRuleDef(t *testing.T) {
 							TokenParseOptions: []TokenParseOptions{
 								{
 									TokenType: "int",
+								},
+							},
+						},
+						SepOptions: TokenOptions{
+							TokenParseOptions: []TokenParseOptions{
+								{
+									TokenType:  "op",
+									TokenValue: ",",
 								},
 							},
 						},

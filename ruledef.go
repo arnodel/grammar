@@ -9,10 +9,10 @@ import (
 )
 
 type RuleDef struct {
-	Name      string
-	OneOf     bool
-	Separator *RuleField
-	Fields    []RuleField
+	Name        string
+	OneOf       bool
+	DropOptions TokenOptions
+	Fields      []RuleField
 }
 
 type RuleField struct {
@@ -86,6 +86,30 @@ func (o TokenOptions) MatchNextToken(s TokenStream) (Token, *ParseError) {
 	}
 }
 
+func (o TokenOptions) DropMatchingNextTokens(s TokenStream) {
+	if len(o.TokenParseOptions) == 0 {
+		return
+	}
+
+outerLoop:
+	for {
+		pos := s.Save()
+		tok := s.Next()
+
+		for _, opts := range o.TokenParseOptions {
+			if opts.TokenType != "" && opts.TokenType != tok.Type() {
+				continue
+			}
+			if opts.TokenValue != "" && opts.TokenValue != tok.Value() {
+				continue
+			}
+			continue outerLoop
+		}
+		s.Restore(pos)
+		return
+	}
+}
+
 func getRuleDefAndValue(r interface{}) (*RuleDef, reflect.Value) {
 	rV := reflect.ValueOf(r)
 	if rV.Kind() != reflect.Ptr {
@@ -132,14 +156,17 @@ func calcRuleDef(tp reflect.Type) (*RuleDef, error) {
 		return nil, errors.New("type should have at least one field")
 	}
 	firstFieldIndex := 0
-	oneOf := tp.Field(0).Type == reflect.TypeOf(OneOf{})
-	seq := tp.Field(0).Type == reflect.TypeOf(Seq{})
+	field0 := tp.Field(0)
+	oneOf := field0.Type == reflect.TypeOf(OneOf{})
+	seq := field0.Type == reflect.TypeOf(Seq{})
+	var dropOptions TokenOptions
 	if oneOf || seq {
 		firstFieldIndex++
+		dropOptions = tokenOptionsFromTagValue(field0.Tag.Get("drop"))
 	} else {
 		return nil, errors.New("first rule field should be OneOf or Seq")
 	}
-	var separatorField *RuleField
+
 	var ruleFields []RuleField
 	for fieldIndex := firstFieldIndex; fieldIndex < numField; fieldIndex++ {
 		field := tp.Field(fieldIndex)
@@ -173,23 +200,13 @@ func calcRuleDef(tp reflect.Type) (*RuleDef, error) {
 				BaseType: field.Type,
 			}
 		}
-		if field.Name == "Separator" {
-			if separatorField != nil {
-				return nil, errors.New("only one separator field allowed in a rule")
-			}
-			if oneOf {
-				return nil, errors.New("OneOf rules cannot have a Separator field")
-			}
-			separatorField = &ruleField
-		} else {
-			ruleFields = append(ruleFields, ruleField)
-		}
+		ruleFields = append(ruleFields, ruleField)
 	}
 	return &RuleDef{
-		Name:      tp.Name(),
-		OneOf:     oneOf,
-		Fields:    ruleFields,
-		Separator: separatorField,
+		Name:        tp.Name(),
+		OneOf:       oneOf,
+		Fields:      ruleFields,
+		DropOptions: dropOptions,
 	}, nil
 }
 
