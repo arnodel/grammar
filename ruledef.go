@@ -86,7 +86,7 @@ func (o TokenOptions) MatchNextToken(s TokenStream) (Token, *ParseError) {
 	}
 }
 
-func getRuleDefAndValue(r interface{}) (*RuleDef, reflect.Value) {
+func getRuleDefAndValue(r any) (*RuleDef, reflect.Value) {
 	rV := reflect.ValueOf(r)
 	if rV.Kind() != reflect.Ptr {
 		panic(fmt.Sprintf("dest must be a pointer, it is %T", r))
