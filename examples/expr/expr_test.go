@@ -10,38 +10,30 @@ import (
 func Example() {
 	tokenStream, _ := tokenise(`1 + 2 + 3`)
 	var expr Expr
-	err := grammar.Parse(&expr, tokenStream, grammar.WithDefaultLogger)
+	err := grammar.Parse(&expr, tokenStream)
 	if err != nil {
 		fmt.Println(err)
 	}
 	grammar.PrettyWrite(os.Stdout, &expr)
 
 	// Output:
-	// SExpr {
-	//   List: List {
-	//     Items: [
-	//       SExpr {
-	//         Atom: atom = "cons" Ln 1, Col 2
-	//       }
-	//       SExpr {
-	//         Atom: atom = "a" Ln 1, Col 7
-	//       }
-	//       SExpr {
-	//         List: List {
-	//           Items: [
-	//             SExpr {
-	//               Atom: atom = "list" Ln 1, Col 10
-	//             }
-	//             SExpr {
-	//               Number: number = "123" Ln 1, Col 15
-	//             }
-	//             SExpr {
-	//               String: string = "\"c\"" Ln 1, Col 19
-	//             }
-	//           ]
+	// Expr {
+	//   Sum: Sum {
+	//     Lhs: Expr {
+	//       Sum: Sum {
+	//         Lhs: Expr {
+	//           Num: Num {
+	//             Tok: number = "1" Ln 1, Col 1
+	//           }
+	//         }
+	//         Rhs: Num {
+	//           Tok: number = "2" Ln 1, Col 5
 	//         }
 	//       }
-	//     ]
+	//     }
+	//     Rhs: Num {
+	//       Tok: number = "3" Ln 1, Col 9
+	//     }
 	//   }
 	// }
 }
