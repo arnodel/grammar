@@ -133,6 +133,11 @@ func Parse(dest any, s TokenStream, opts ...ParseOption) *ParseError {
 // ParseWithOptions is the same as Parse but the ParseOptions are explicitely
 // given (this is mostly used by the parser generator).
 func ParseWithOptions(dest any, s *ParserState, opts TokenOptions) *ParseError {
+	switch dest.(type) {
+	case *SimpleToken, *Tok, *Match:
+		// Token rules: cheap, and their outcome depends on opts, which the key lacks.
+		return parseUnmemoized(dest, s, opts)
+	}
 	pos := s.Save()
 	key := memoKey{pos: pos, ruleType: reflect.TypeOf(dest)}
 	memoVal := s.memo[key]
@@ -179,17 +184,23 @@ func ParseWithOptions(dest any, s *ParserState, opts TokenOptions) *ParseError {
 		if err == nil {
 			memoVal.err = nil
 			memoVal.pos = s.Save()
-			i := 0
 			for memoVal.accessed {
-				i++
+				// Grow the seed: re-parse with the last result as the
+				// left-recursive reference, while that gets further.
+				seed := reflect.New(reflect.TypeOf(dest).Elem())
+				seed.Elem().Set(reflect.ValueOf(dest).Elem())
+				memoVal.val = seed.Interface()
 				memoVal.accessed = false
 				s.Restore(pos)
-				if p.Parse(dest, s, opts) != nil {
+				reflect.ValueOf(dest).Elem().SetZero()
+				if p.Parse(dest, s, opts) != nil || s.Save() <= memoVal.pos {
+					reflect.ValueOf(dest).Elem().Set(seed.Elem())
 					s.Restore(memoVal.pos)
 					break
 				}
 				memoVal.pos = s.Save()
 			}
+			memoVal.val = dest
 		} else {
 			memoVal.err = err
 			s.MergeError(err)
@@ -281,9 +292,37 @@ func (e *ParseError) Merge(e2 *ParseError) *ParseError {
 	if e.Pos < e2.Pos {
 		return e2
 	}
+	if e == e2 {
+		return e
+	}
+	// A fresh slice (append could write into e's array, shared with other
+	// errors), each option once (merging errors that already share options
+	// would otherwise multiply them with every level of nesting).
+	opts := make([]TokenParseOptions, 0, len(e.TokenParseOptions)+len(e2.TokenParseOptions))
+	seen := make(map[TokenParseOptions]bool, cap(opts))
+	for _, list := range [][]TokenParseOptions{e.TokenParseOptions, e2.TokenParseOptions} {
+		for _, o := range list {
+			if !seen[o] {
+				seen[o] = true
+				opts = append(opts, o)
+			}
+		}
+	}
 	return &ParseError{
 		Token:             e.Token,
-		TokenParseOptions: append(e.TokenParseOptions, e2.TokenParseOptions...),
+		TokenParseOptions: opts,
 		Pos:               e.Pos,
 	}
+}
+
+func parseUnmemoized(dest any, s *ParserState, opts TokenOptions) *ParseError {
+	p, ok := dest.(Parser)
+	if !ok {
+		panic(fmt.Sprintf("invalid type for rule %#v", dest))
+	}
+	err := p.Parse(dest, s, opts)
+	if err != nil {
+		s.MergeError(err)
+	}
+	return err
 }
