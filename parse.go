@@ -57,6 +57,7 @@ type ParserState struct {
 	keyStack []memoKey
 	lastErr  *ParseError
 	logger   *log.Logger
+	exhaust  bool
 }
 
 func (s *ParserState) MergeError(err *ParseError) *ParseError {
@@ -112,6 +113,20 @@ func WithLogger(l *log.Logger) ParseOption {
 
 var WithDefaultLogger = WithLogger(log.Default())
 
+// Exhaust makes Parse fail unless the whole token stream is consumed.  Without
+// it, Parse succeeds as soon as the rule matches a prefix of the input, so
+// e.g. an expression grammar happily parses `1 +` as `1`.  With it, leftover
+// input yields a *ParseError whose Err is ErrNotExhausted, unless the parser
+// got further while trying to match more, in which case that (usually more
+// helpful) error is returned instead.
+var Exhaust ParseOption = func(s *ParserState) {
+	s.exhaust = true
+}
+
+// ErrNotExhausted is the Err of the *ParseError returned by Parse with the
+// Exhaust option when some input is left after the rule matched.
+var ErrNotExhausted = errors.New("expected end of input")
+
 // Parse tries to interpret dest as a grammar rule and use it to parse the given
 // token stream.  Parse can panic if dest is not a valid grammar rule.  It
 // returns a non-nil *ParseError if the token stream does not match the rule.
@@ -127,7 +142,28 @@ func Parse(dest any, s TokenStream, opts ...ParseOption) *ParseError {
 	if err != nil {
 		return state.lastErr
 	}
+	if state.exhaust {
+		return state.checkExhausted(dest)
+	}
 	return nil
+}
+
+// checkExhausted returns an error unless the next token is EOF.  Tokens the
+// top-level rule drops (its "drop" tag) are skipped first, so trailing
+// dropped tokens do not count as leftover input.
+func (s *ParserState) checkExhausted(dest any) *ParseError {
+	if tp := reflect.TypeOf(dest); tp != nil && tp.Kind() == reflect.Ptr {
+		if ruleDef, err := getRuleDef(tp.Elem()); err == nil {
+			ruleDef.DropOptions.DropMatchingNextTokens(s)
+		}
+	}
+	pos := s.Save()
+	tok := s.Next()
+	if tok.Type() == EOF.TokType {
+		return nil
+	}
+	s.Restore(pos)
+	return s.lastErr.Merge(&ParseError{Err: ErrNotExhausted, Token: tok, Pos: pos})
 }
 
 // ParseWithOptions is the same as Parse but the ParseOptions are explicitely
