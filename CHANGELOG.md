@@ -26,6 +26,9 @@ the breaking changes are listed last.
 - The `genparse` command works again and covers all current features;
   generated code shares its semantics with the reflection path through the
   helpers in `compiled.go`.
+- `TokenDef.Scan`, a hand-written scanner for a token type, on its own or
+  guarded by a pattern.
+- `SimpleTokeniser` patterns may contain capturing groups.
 
 ### Fixed
 
@@ -38,6 +41,10 @@ the breaking changes are listed last.
 - Merging two errors at the same position dropped the error message; both
   the message and the expected tokens are now reported.
 - Errors at end of input reported "Ln 0, Col 0".
+- `SimpleTokeniser` tokenised at about 3 MB/s, with several allocations per
+  token; it is now several times faster and allocates once per regular
+  expression match, none for literal and character class patterns.
+- A `SimpleTokeniser` pattern matching the empty string looped forever.
 
 ### Breaking changes
 
@@ -50,4 +57,12 @@ the breaking changes are listed last.
   printed as `type = "value" Ln l, Col c`.
 - `ParseError` messages start with the position instead of the token index.
 - Memoisation changes which rules may be left recursive: only memoised ones.
+- `SimpleTokeniser` takes the longest match rather than the first listed
+  (ties go to the first listed).  `let` listed before `[a-z]+` now tokenises
+  `letter` as one identifier instead of `let` + `ter`.
+- `TokenDef.Special func(string) string` is replaced by
+  `Scan func(string) int`, returning the length of the token (0 for none).
+- `SimpleTokeniser` streams hold `*SimpleToken` values, not `SimpleToken`.
+- `SimpleTokeniser` panics when a definition has neither a pattern nor a
+  `Scan`, or pushes an unknown mode.
 - Requires Go 1.23.

@@ -210,9 +210,7 @@ func TestParse2(t *testing.T) {
 	}
 }
 
-// Run with and without -tags nocompiledgrammar to compare the generated and
-// reflection based parsers.
-func BenchmarkParse(b *testing.B) {
+func benchmarkSource() string {
 	var sb strings.Builder
 	sb.WriteString("[")
 	for i := 0; i < 2000; i++ {
@@ -222,7 +220,23 @@ func BenchmarkParse(b *testing.B) {
 		sb.WriteString(`{"a": 1, "b": "x", "c": [true, null, 3], "d": {"e": []}}`)
 	}
 	sb.WriteString("]")
-	src := sb.String()
+	return sb.String()
+}
+
+func BenchmarkTokenise(b *testing.B) {
+	src := benchmarkSource()
+	b.SetBytes(int64(len(src)))
+	for i := 0; i < b.N; i++ {
+		if _, err := TokeniseJsonString(src); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+// Run with and without -tags nocompiledgrammar to compare the generated and
+// reflection based parsers.
+func BenchmarkParse(b *testing.B) {
+	src := benchmarkSource()
 	toks, err := TokeniseJsonString(src)
 	if err != nil {
 		b.Fatal(err)

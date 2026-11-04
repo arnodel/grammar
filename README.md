@@ -125,7 +125,7 @@ with `grammar.SimpleTokeniser`:
 var tokenise = grammar.SimpleTokeniser([]grammar.TokenDef{
     {
         // If Name is empty, the token is skipped in the token stream
-        Ptn: `\s+`, // A regular expression (must not contain capturing groups)
+        Ptn: `\s+`, // A regular expression, matched at the start of the input
     },
     {
         Name: "bkt", // The token type, as seen in "tok" struct tags
@@ -145,6 +145,30 @@ var tokenise = grammar.SimpleTokeniser([]grammar.TokenDef{
     },
 })
 ```
+
+At each point in the input the definition with the longest match wins, and
+among equal matches the first one listed, so keywords can be listed before
+an identifier pattern without clashing with longer identifiers.  Literal
+patterns and character classes are matched without running a regular
+expression.
+
+A `Scan func(string) int` on a definition takes over from the pattern (or
+complements it: when both are given the pattern decides whether `Scan` is
+tried, and `Scan` decides the length of the token).  It returns the length
+of the token at the start of the remaining input, or 0, and covers what a
+regular expression cannot, like nested comments or strings with escapes:
+
+```golang
+    {
+        Name: "comment",
+        Ptn:  `/\*`,
+        Scan: scanNestedComment, // func(string) int
+    },
+```
+
+Definitions can be grouped into modes (`Mode`), entered and left with
+`PushMode` and `PopMode` on the tokens that switch context, e.g. for string
+interpolation.
 
 `grammar.SimpleToken` is also a `Parser`, so a field of that type matches a
 token and stores it.  `grammar.Tok` wraps it for use as the first field of a
