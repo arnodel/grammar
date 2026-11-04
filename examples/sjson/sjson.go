@@ -36,13 +36,15 @@ type Pair struct {
 }
 
 // SJSON stands for Simplified JSON as strings and numbers are simplified.
-type SJSON = grammar.OneOf5[
-	Number,
-	String,
-	Boolean,
-	List,
-	Object,
-]
+type SJSON struct {
+	grammar.OneOf5[
+		Number,
+		String,
+		Boolean,
+		List,
+		Object,
+	]
+}
 
 var _ grammar.Parser = &SJSON{}
 
