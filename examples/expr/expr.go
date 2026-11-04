@@ -2,6 +2,8 @@ package expr
 
 import "github.com/arnodel/grammar"
 
+//go:generate go run github.com/arnodel/grammar/cmd/genparse
+
 type Token = grammar.SimpleToken
 
 type Expr struct {

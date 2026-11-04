@@ -4,7 +4,7 @@ import (
 	"github.com/arnodel/grammar"
 )
 
-//go:generate genparse
+//go:generate go run github.com/arnodel/grammar/cmd/genparse
 
 type Token = grammar.SimpleToken
 

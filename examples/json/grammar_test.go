@@ -2,6 +2,7 @@ package json
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/arnodel/grammar"
@@ -206,5 +207,32 @@ func TestParse2(t *testing.T) {
 				t.Errorf("out = %v, want = %v", out, tt.want)
 			}
 		})
+	}
+}
+
+// Run with and without -tags nocompiledgrammar to compare the generated and
+// reflection based parsers.
+func BenchmarkParse(b *testing.B) {
+	var sb strings.Builder
+	sb.WriteString("[")
+	for i := 0; i < 2000; i++ {
+		if i > 0 {
+			sb.WriteString(", ")
+		}
+		sb.WriteString(`{"a": 1, "b": "x", "c": [true, null, 3], "d": {"e": []}}`)
+	}
+	sb.WriteString("]")
+	src := sb.String()
+	toks, err := TokeniseJsonString(src)
+	if err != nil {
+		b.Fatal(err)
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		toks.Restore(0)
+		var j Json
+		if err := grammar.Parse(&j, toks, grammar.Exhaust); err != nil {
+			b.Fatal(err)
+		}
 	}
 }

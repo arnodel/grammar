@@ -2,6 +2,8 @@ package sjson
 
 import "github.com/arnodel/grammar"
 
+//go:generate go run github.com/arnodel/grammar/cmd/genparse
+
 type Number struct {
 	grammar.Tok `tok:"number"`
 }

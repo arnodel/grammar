@@ -129,28 +129,32 @@ SExpr {
 
 ## Generating a parser
 
-WARNING: the parser generator is currently out of sync with the grammar
-definition, so don't use it :)
+The above works using reflection.  It is also possible to generate, for each
+rule type, a `Parse` method that does the same thing without reflection.
+The generated methods call back into the grammar package for the logic of
+repeated fields, errors and tags, so they behave exactly like the reflection
+based ones; they are just a little faster (around 10-15% on the JSON example)
+and allocate less.
 
-The above works using reflection, which is fine but can be a little slow if you
-are parsing very big files.  It is also possible to compile a parser.
-
-First you need the command that generates the parser.
-
-```sh
-go install github.com/arnodel/grammar/cmd/genparse
-```
-
-Then the simplest is to add this line to the file containing the grammar you
-want to compile:
+Add this line to the file containing the grammar you want to compile:
 
 ```golang
-//go:generate genparse
+//go:generate go run github.com/arnodel/grammar/cmd/genparse
 ```
 
-You can now generate the compiled parser by running `go generate` in your
-package.  If your file is called say `grammar.go`, it will generated a file in
-the same package called `grammar.compiled.go`.  You can still parse files the
-same way as before using `grammar.Parse()` but this will no longer use
-reflection!  Note that you can always force reflection to be used by compiling your
-program with the `nocompiledgrammar` go compiler tag.
+Then run `go generate` in your package.  If your file is called say
+`grammar.go`, this generates a file in the same package called
+`grammar.compiled.go`, with a `Parse` method for every struct type whose first
+field is `grammar.Seq`, `grammar.OneOf` or `grammar.Tok`.  You parse files the
+same way as before with `grammar.Parse()`, which now runs the generated code.
+The generic `OneOfN` types need nothing generated as they never used
+reflection.
+
+The generated file has the build constraint `!nocompiledgrammar`, so you can
+always go back to reflection by building with `-tags nocompiledgrammar`.  This
+is also a convenient way to check that the two agree: run your tests with and
+without the tag.
+
+The generator only looks at one file, so a rule whose fields refer to rule
+types in other files of the package is fine, but each file holding rule types
+needs its own `go:generate` line.
