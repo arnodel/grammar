@@ -1,131 +1,274 @@
 # grammar
 
-A parser generator where rules defined as go structs and code generation is
-optional.  The concepts are introduced in the simple example below.  There are
-also examples in the [examples/](./examples/) directory, the most interesting
-being [examples/json](./examples/json/).
+A parser library for Go where the rules are Go structs and the parse tree is
+those same structs, filled in.  There is no separate grammar file or DSL: the
+type you want to get out of the parser *is* the grammar.  Parsing uses
+reflection by default; a generator can produce equivalent reflection-free
+code if you want it.
+
+The parser is a memoising ("packrat") recursive descent parser with
+[PEG](https://en.wikipedia.org/wiki/Parsing_expression_grammar) semantics:
+ordered choice, greedy repetition, and left recursion supported.
+
+The concepts are introduced in the example below.  There are more examples in
+[examples/](./examples/): [json](./examples/json/) is the most complete,
+[sjson](./examples/sjson/) shows the generic one-of types and
+[expr](./examples/expr/) shows a left-recursive expression grammar.
 
 ## Rules
 
-Rules can be written as Go structs.  Here is a definition for s-exprs:
+Rules are Go structs whose first field says what kind of rule it is.  Here is
+a definition for s-expressions:
 
 ```golang
+import "github.com/arnodel/grammar"
+
+type Token = grammar.SimpleToken
 
 // SExpr ::= Number | String | Atom | List
 type SExpr struct {
-    grammar.OneOf                // This rule is a "one-of": one of the rules below has to match
-    Number *Token `tok:"number"` // A pointer field means an optional match
-    String *Token `tok:"string"` // This "tok" tag means only tokens of type "string" will match
+    grammar.OneOf                // A "one-of" rule: exactly one of the fields below matches
+    Number *Token `tok:"number"` // A pointer field is an alternative; this one matches a "number" token
+    String *Token `tok:"string"`
     Atom   *Token `tok:"atom"`
-    *List                        // All field in a one-of rule must be optional
+    *List                        // An embedded pointer works too, the field is named List
 }
 
-// List ::= "(" [Item] ")"
+// List ::= "(" SExpr* ")"
 type List struct {
-    grammar.Seq                           // This is a Sequence rule, all fields must match in a sequence
-    OpenBkt  grammar.Match `tok:"bkt,("`  // This "tok" tag means only "bkt" tokens with value "(" will match
-    Items    []SExpr
-    CloseBkt grammar.Match `tok:"bkt,)`
+    grammar.Seq                           // A sequence rule: all fields match in order
+    OpenBkt  grammar.Match `tok:"bkt,("`  // Matches a "bkt" token with value "(" (and stores nothing)
+    Items    []SExpr                      // A slice field matches zero or more items
+    CloseBkt grammar.Match `tok:"bkt,)"`
 }
 ```
 
-The `grammar.Match` type above is an empty struct, so it takes no space in the
-structure, but it only matches the token specification in the `tok` tag.
+There are three kinds of rule, chosen by the first (embedded) field:
+
+- `grammar.Seq`: every field must match, in order.
+- `grammar.OneOf`: the first field that matches wins (ordered choice).  All
+  fields must be pointers or slices.
+- `grammar.Tok`: the rule matches a single token; the struct has no other
+  field and the `tok` tag goes on the `grammar.Tok` field itself.  See
+  [Tokens](#tokens) below.
+
+Within a rule, the type of a field says how it matches:
+
+- A plain field (`Items SExpr`) must match.
+- A pointer field (`Number *Token`) is optional in a `Seq`, and one
+  alternative in a `OneOf`.
+- A slice field (`Items []SExpr`) matches a run of items.  In a `OneOf`, the
+  alternative matches if there is at least one item.
+
+Field types can be other rule types, `grammar.Match`, your token type, or
+anything implementing `grammar.Parser`.  `grammar.Match` is an empty struct:
+it matches the token given by its `tok` tag and takes no space in the result.
+`grammar.Empty` always matches and consumes nothing.
+
+### Tags
+
+| tag | on | meaning |
+|---|---|---|
+| `tok:"type"` | a token field | match a token of this type |
+| `tok:"type,value"` | a token field | match a token of this type with this value |
+| `tok:"a\|b,x"` | a token field | alternatives, separated by `\|` |
+| `tok:"type*"` | a token field | a `*` after the type matches without consuming the token (lookahead) |
+| `sep:"type,value"` | a slice field | items are separated by this token |
+| `trail:"optional"` | a slice field with `sep` | a separator after the last item is allowed (`1, 2,`) |
+| `trail:"required"` | a slice field with `sep` | every item must be followed by the separator (`1; 2;`) |
+| `size:"n"`, `size:"min-max"`, `size:"min-"`, `size:"-max"` | a slice field | bounds on the number of items |
+| `drop:"type"` | the `Seq` or `OneOf` field | tokens of this type are skipped before each field (e.g. whitespace or comments that the tokeniser keeps) |
+
+A slice with no `size` matches zero or more items.  A separator is matched
+only between items unless a `trail` mode says otherwise.
+
+### Generic one-of rules
+
+For a rule that is purely a choice between other rules, the generic types
+`grammar.OneOf2` to `grammar.OneOf6` avoid the wrapper struct.  Embed one in
+a named struct (a type alias would not let you define methods on it):
+
+```golang
+type Number struct {
+    grammar.Tok `tok:"number"`
+}
+
+type SJSON struct {
+    grammar.OneOf5[Number, String, Boolean, List, Object]
+}
+```
+
+After parsing, `Value` holds a pointer to the alternative that matched, so it
+is consumed with a type switch:
+
+```golang
+switch v := sjson.Value.(type) {
+case *Number:
+    ...
+case *List:
+    ...
+}
+```
+
+The type parameters are unconstrained (`any`) because Go cannot express
+"pointer to T implements Parser" without doubling them; an argument that is
+not a rule type is reported when the rule is first parsed.
 
 ## Tokens
 
-This is not quite complete as you need a `Token` type.  You can create your own
-or if your needs are simple enough use `grammar.SimpleToken`:
-
-```golang
-type Token = grammar.SimpleToken
-```
-
-In order to parse your s-exprs into the data structures aboves you also need a
-tokeniser.  You can make your own tokeniser or you can build one simply with the
-`grammar.SimpleTokeniser` function:
+The parser consumes a `grammar.TokenStream`, whose tokens implement
+`grammar.Token`: a type, a value and a position.  You can write your own
+token and stream types, or use `grammar.SimpleToken` and build a tokeniser
+with `grammar.SimpleTokeniser`:
 
 ```golang
 var tokenise = grammar.SimpleTokeniser([]grammar.TokenDef{
     {
         // If Name is empty, the token is skipped in the token stream
-        Ptn: `\s+` // This is a regular expression (must not contain groups)
+        Ptn: `\s+`, // A regular expression (must not contain capturing groups)
     },
     {
-        Name: "bkt", // This is the type of the token seen in the "tok" struct tag
-        Ptn: `[()]`,
+        Name: "bkt", // The token type, as seen in "tok" struct tags
+        Ptn:  `[()]`,
     },
     {
         Name: "string",
-        Ptn: `"[^"]*"`,
+        Ptn:  `"[^"]*"`,
     },
     {
         Name: "number",
-        Ptn: `-?[0-9]+(?:\.[0-9]+)?`,
+        Ptn:  `-?[0-9]+(?:\.[0-9]+)?`,
     },
     {
         Name: "atom",
-        Ptn: `[a-zA-Z_][a-zA-Z0-9_-]*`,
+        Ptn:  `[a-zA-Z_][a-zA-Z0-9_-]*`,
     },
 })
 ```
 
+`grammar.SimpleToken` is also a `Parser`, so a field of that type matches a
+token and stores it.  `grammar.Tok` wraps it for use as the first field of a
+single-token rule type, which is handy with the generic one-of types.
+
 ## Parsing
 
-Now putting all this together you can parse an s-expr of your choice:
-
 ```golang
-
-tokenStream, _ := tokenise(`(cons a (list 123 "c")))`)
+tokenStream, _ := tokenise(`(cons a (list 123 "c"))`)
 var sexpr SExpr
-err := grammar.Parse(&sexpr, tokenStream)
+err := grammar.Parse(&sexpr, tokenStream, grammar.Exhaust)
 ```
 
-Now `sexpr`'s fields have been filled and you explore the syntax tree by
-traversing the fields in `sexpr`, e.g. `sexpr.List.Items` is now a slice of
-`SExprs`, `sexpr.List.Items[0].Atom` is a `Token` with Value `"cons"` (and type
-`atom`).
+`sexpr` is now filled in: `sexpr.List.Items` is a slice of `SExpr`, and
+`sexpr.List.Items[0].Atom` is a `Token` of type `atom` with value `cons`.
 
-There is a convenient function to output a rule struct:
+`grammar.Exhaust` makes the parse fail unless all the input was consumed;
+without it a rule may match just a prefix.  The error is a `*grammar.ParseError`
+with the offending token, its position and what was expected there:
+
+```
+Ln 1, Col 7: number with value "3": expected token with value "+"; expected end of input
+```
+
+`grammar.WithLogger(logger)` traces the parse, which helps when a grammar does
+not do what you expect.
+
+To look at a parse tree, `grammar.PrettyWrite` writes a readable form of it:
 
 ```golang
-grammar.PrettyWrite(sexpr, os.Stdout)
+grammar.PrettyWrite(os.Stdout, &sexpr)
 ```
 
-This will output a pretty representation of `sexpr`:
 ```
 SExpr {
   List: List {
-    OpenBkt: {}
     Items: [
       SExpr {
-        Atom: {atom cons}
+        Atom: atom = "cons" Ln 1, Col 2
       }
       SExpr {
-        Atom: {atom a}
+        Atom: atom = "a" Ln 1, Col 7
       }
       SExpr {
         List: List {
-          OpenBkt: {}
           Items: [
             SExpr {
-              Atom: {atom list}
+              Atom: atom = "list" Ln 1, Col 10
             }
             SExpr {
-              Number: {number 123}
+              Number: number = "123" Ln 1, Col 15
             }
             SExpr {
-              String: {string "c"}
+              String: string = "\"c\"" Ln 1, Col 19
             }
           ]
-          CloseBkt: {}
         }
       }
     ]
-    CloseBkt: {}
   }
 }
 ```
+
+Empty optional fields, empty slices and `Match` fields are omitted.
+
+## Semantics
+
+The parser works like a PEG parser, which differs from a context-free grammar
+in two ways that matter when you write rules:
+
+- **Choice is ordered.**  A `OneOf` takes the first alternative that matches,
+  not the longest.  Put the more specific alternative first.
+- **Repetition is greedy and does not backtrack.**  A slice field takes as
+  many items as it can; if what follows then fails to match, the parser does
+  not try again with fewer items.
+
+Results are memoised by rule type and position, so parsing is linear in the
+size of the input for grammars whose alternatives share prefixes, and the same
+sub-rule is never parsed twice at the same place.
+
+### Left recursion
+
+Thanks to memoisation, rules may be left recursive, which is the natural way
+to write left-associative operators:
+
+```golang
+// Expr ::= Expr "+" Num | Num
+type Expr struct {
+    grammar.OneOf
+    Sum *Sum
+    Num *Num
+}
+
+type Sum struct {
+    grammar.Seq
+    Lhs  Expr
+    Plus grammar.Match `tok:"op,+"`
+    Rhs  Num
+}
+
+type Num struct {
+    grammar.Tok `tok:"number"`
+}
+```
+
+Parsing `1 + 2 + 3` gives `Sum{Sum{1, 2}, 3}`.  Indirect left recursion
+(through several rules) works too.
+
+## Custom rules
+
+Any type with a `Parse(r any, s *grammar.ParserState, opts grammar.TokenOptions) *grammar.ParseError`
+method is a rule.  `opts` holds the `tok` tag of the field being parsed.  If
+the result of `Parse` depends only on the rule type, the position and the
+options, the type can also implement `grammar.Memoisable` to have its results
+cached:
+
+```golang
+func (w *Word) MemoKey(opts grammar.TokenOptions) any {
+    return opts.Key()
+}
+```
+
+Rules that do not implement it are parsed afresh every time, which is the
+right default for cheap token-like rules.
 
 ## Generating a parser
 
