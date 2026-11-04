@@ -34,8 +34,8 @@ func (w *mtMemoWord) Parse(r any, s *ParserState, opts TokenOptions) *ParseError
 	return nil
 }
 
-func (*mtMemoWord) MemoKey(opts TokenOptions) (any, bool) {
-	return opts.Key(), true
+func (*mtMemoWord) MemoKey(opts TokenOptions) any {
+	return opts.Key()
 }
 
 // Stmt ::= "let" ident | ident

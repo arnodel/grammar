@@ -62,17 +62,18 @@ type Parser interface {
 // position (packrat parsing), which also makes left recursion through it
 // work.  For the cache to be valid, the outcome of Parse must be fully
 // determined by the rule type, the stream position and the key returned by
-// MemoKey.  Rules that do not implement Memoisable are never memoised.
+// MemoKey; a rule for which that is not true must not implement Memoisable
+// and is then parsed afresh every time.
 //
 // Seq, OneOf and the OneOfN types implement it, returning a nil key, as they
-// ignore the token options passed to Parse.  A rule whose result depends on
-// those options must include them in its key, e.g. by returning opts.Key();
-// a rule that depends on something that cannot be captured in a key should
-// return ok == false to be parsed afresh each time.
+// ignore the token options passed to Parse; a struct rule embedding one of
+// them inherits the method, so if it overrides Parse the override must obey
+// the same rule.  A custom rule whose result depends on the token options
+// should return opts.Key().
 //
 // Note that only memoised rules can be the head of a left-recursive cycle.
 type Memoisable interface {
-	MemoKey(opts TokenOptions) (key any, ok bool)
+	MemoKey(opts TokenOptions) any
 }
 
 // A Token has a Type() and Value() method. A TokenStream's Next() method must
@@ -166,12 +167,8 @@ func ParseWithOptions(dest any, s *ParserState, opts TokenOptions) *ParseError {
 	if !ok {
 		return parseUnmemoized(dest, s, opts)
 	}
-	extra, ok := m.MemoKey(opts)
-	if !ok {
-		return parseUnmemoized(dest, s, opts)
-	}
 	pos := s.Save()
-	key := memoKey{pos: pos, ruleType: reflect.TypeOf(dest), extra: extra}
+	key := memoKey{pos: pos, ruleType: reflect.TypeOf(dest), extra: m.MemoKey(opts)}
 	memoVal := s.memo[key]
 	if memoVal != nil {
 		s.Logf("pos: %d, memoVal: %v", pos, *memoVal)

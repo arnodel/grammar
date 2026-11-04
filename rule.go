@@ -41,8 +41,8 @@ var _ Parser = &OneOf{}
 var _ Memoisable = OneOf{}
 
 // MemoKey implements Memoisable: a OneOf rule ignores the token options.
-func (OneOf) MemoKey(opts TokenOptions) (any, bool) {
-	return nil, true
+func (OneOf) MemoKey(opts TokenOptions) any {
+	return nil
 }
 
 func (OneOf) Parse(r interface{}, s *ParserState, opts TokenOptions) *ParseError {
@@ -87,8 +87,8 @@ var _ Parser = &Seq{}
 var _ Memoisable = Seq{}
 
 // MemoKey implements Memoisable: a Seq rule ignores the token options.
-func (Seq) MemoKey(opts TokenOptions) (any, bool) {
-	return nil, true
+func (Seq) MemoKey(opts TokenOptions) any {
+	return nil
 }
 
 func (Seq) Parse(r interface{}, s *ParserState, opts TokenOptions) *ParseError {
