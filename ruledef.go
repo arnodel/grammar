@@ -55,6 +55,30 @@ type TokenOptions struct {
 	TokenParseOptions []TokenParseOptions
 }
 
+// Key returns a comparable value identifying the options, for use by
+// Memoisable rules whose Parse result depends on them.
+func (o TokenOptions) Key() any {
+	switch len(o.TokenParseOptions) {
+	case 0:
+		return nil
+	case 1:
+		return o.TokenParseOptions[0]
+	}
+	var b strings.Builder
+	for i, opt := range o.TokenParseOptions {
+		if i > 0 {
+			b.WriteByte('|')
+		}
+		b.WriteString(opt.TokenType)
+		if opt.DoNotConsume {
+			b.WriteByte('*')
+		}
+		b.WriteByte(',')
+		b.WriteString(opt.TokenValue)
+	}
+	return b.String()
+}
+
 type SizeOptions struct {
 	Min, Max int
 }

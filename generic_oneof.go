@@ -10,6 +10,13 @@ type OneOfValue struct {
 	Value any
 }
 
+var _ Memoisable = OneOfValue{}
+
+// MemoKey implements Memoisable: the OneOfN rules ignore the token options.
+func (OneOfValue) MemoKey(opts TokenOptions) (any, bool) {
+	return nil, true
+}
+
 func (o *OneOfValue) PrettyWrite(out io.Writer, r any, pfx string, indent int) (err error) {
 	return prettyWrite(out, o.Value, pfx, indent)
 }
