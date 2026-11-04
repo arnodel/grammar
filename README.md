@@ -77,7 +77,7 @@ it matches the token given by its `tok` tag and takes no space in the result.
 | `trail:"optional"` | a slice field with `sep` | a separator after the last item is allowed (`1, 2,`) |
 | `trail:"required"` | a slice field with `sep` | every item must be followed by the separator (`1; 2;`) |
 | `size:"n"`, `size:"min-max"`, `size:"min-"`, `size:"-max"` | a slice field | bounds on the number of items |
-| `drop:"type"` | the `Seq` or `OneOf` field | tokens of this type are skipped before each field (e.g. whitespace or comments that the tokeniser keeps) |
+| `drop:"type"` | the `Seq` or `OneOf` field | tokens of this type are skipped before each field, item and separator of the rule (e.g. whitespace or comments that the tokeniser keeps) |
 
 A slice with no `size` matches zero or more items.  A separator is matched
 only between items unless a `trail` mode says otherwise.

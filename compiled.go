@@ -22,8 +22,8 @@ func TrailModeFromTag(tag string) (TrailMode, error) {
 }
 
 // RepeatOptionsFromTags parses the "size", "sep" and "trail" struct tags of a
-// repeated field.
-func RepeatOptionsFromTags(size, sep, trail string) (RepeatOptions, error) {
+// repeated field and the "drop" tag of its rule.
+func RepeatOptionsFromTags(size, sep, trail, drop string) (RepeatOptions, error) {
 	sizeOpts, err := sizeOptionsFromTagValue(size)
 	if err != nil {
 		return RepeatOptions{}, err
@@ -36,6 +36,7 @@ func RepeatOptionsFromTags(size, sep, trail string) (RepeatOptions, error) {
 		SizeOptions: sizeOpts,
 		Sep:         tokenOptionsFromTagValue(sep),
 		Trail:       trailMode,
+		Drop:        tokenOptionsFromTagValue(drop),
 	}
 	if trailMode != TrailNone && len(opts.Sep.TokenParseOptions) == 0 {
 		return RepeatOptions{}, errTrailWithoutSep
@@ -45,8 +46,8 @@ func RepeatOptionsFromTags(size, sep, trail string) (RepeatOptions, error) {
 
 // MustRepeatOptions is RepeatOptionsFromTags for package-level variables in
 // generated code; it panics on an invalid tag.
-func MustRepeatOptions(size, sep, trail string) RepeatOptions {
-	opts, err := RepeatOptionsFromTags(size, sep, trail)
+func MustRepeatOptions(size, sep, trail, drop string) RepeatOptions {
+	opts, err := RepeatOptionsFromTags(size, sep, trail, drop)
 	if err != nil {
 		panic(err)
 	}

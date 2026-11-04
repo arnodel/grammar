@@ -19,7 +19,8 @@ the breaking changes are listed last.
   `ErrNotExhausted` identifies that error.
 - `trail` tag on repeated fields with a separator: `optional` allows a
   trailing separator, `required` makes the separator a terminator.
-- `drop` tag on a rule, to skip tokens of given types between fields.
+- `drop` tag on a rule, to skip tokens of given types before each field,
+  item and separator.
 - `PrettyWriter` interface, for types that want to control their pretty
   output.
 - The `genparse` command works again and covers all current features;

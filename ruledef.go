@@ -55,16 +55,19 @@ type TokenOptions struct {
 	TokenParseOptions []TokenParseOptions
 }
 
-// RepeatOptions gathers the options of a repeated field.
+// RepeatOptions gathers the options of a repeated field, and the drop
+// options of its rule.
 type RepeatOptions struct {
 	SizeOptions
 	Sep   TokenOptions
 	Trail TrailMode
+	Drop  TokenOptions // tokens to skip before each item and separator
 }
 
-// RepeatOptions returns the repeat options of the field.
-func (f RuleField) RepeatOptions() RepeatOptions {
-	return RepeatOptions{SizeOptions: f.SizeOptions, Sep: f.SepOptions, Trail: f.Trail}
+// RepeatOptions returns the repeat options of the field, with the given drop
+// options.
+func (f RuleField) RepeatOptions(drop TokenOptions) RepeatOptions {
+	return RepeatOptions{SizeOptions: f.SizeOptions, Sep: f.SepOptions, Trail: f.Trail, Drop: drop}
 }
 
 // Key returns a comparable value identifying the options, for use by

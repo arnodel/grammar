@@ -13,7 +13,7 @@ func (r *Boolean) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) *
 
 var (
 	_List_Open_tok  = grammar.TokenOptionsFromTag("op,[")
-	_List_Items_rep = grammar.MustRepeatOptions("", "op,,", "")
+	_List_Items_rep = grammar.MustRepeatOptions("", "op,,", "", "")
 	_List_Close_tok = grammar.TokenOptionsFromTag("op,]")
 )
 
@@ -61,7 +61,7 @@ func (r *Number) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) *g
 
 var (
 	_Object_Open_tok  = grammar.TokenOptionsFromTag("op,{")
-	_Object_Items_rep = grammar.MustRepeatOptions("", "op,,", "")
+	_Object_Items_rep = grammar.MustRepeatOptions("", "op,,", "", "")
 	_Object_Close_tok = grammar.TokenOptionsFromTag("op,}")
 )
 

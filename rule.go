@@ -64,7 +64,7 @@ func (OneOf) Parse(r interface{}, s *ParserState, opts TokenOptions) *ParseError
 				err = err.Merge(fieldErr)
 			}
 		case ruleField.Array:
-			itemsV, n, arrErr, ok := parseRepeated(ruleField, s)
+			itemsV, n, arrErr, ok := parseRepeated(ruleField, ruleDef.DropOptions, s)
 			err = err.Merge(arrErr)
 			if ok && n > 0 {
 				elem.Field(ruleField.Index).Set(itemsV)
@@ -117,7 +117,7 @@ func (Seq) Parse(r interface{}, s *ParserState, opts TokenOptions) *ParseError {
 				}
 			}
 		case ruleField.Array:
-			itemsV, n, arrErr, ok := parseRepeated(ruleField, s)
+			itemsV, n, arrErr, ok := parseRepeated(ruleField, ruleDef.DropOptions, s)
 			err = err.Merge(arrErr)
 			if !ok {
 				return err
@@ -144,10 +144,10 @@ func (Seq) Parse(r interface{}, s *ParserState, opts TokenOptions) *ParseError {
 // using repeatCore for the logic.  It returns the slice of items, how many
 // there are, the error that stopped the repetition (nil if it stopped because
 // Max was reached) and whether at least Min items were found.
-func parseRepeated(ruleField RuleField, s *ParserState) (itemsV reflect.Value, n int, err *ParseError, ok bool) {
+func parseRepeated(ruleField RuleField, drop TokenOptions, s *ParserState) (itemsV reflect.Value, n int, err *ParseError, ok bool) {
 	itemsV = reflect.Zero(reflect.SliceOf(ruleField.BaseType))
 	var itemPtrV reflect.Value
-	n, err, ok = repeatCore(s, ruleField.RepeatOptions(),
+	n, err, ok = repeatCore(s, ruleField.RepeatOptions(drop),
 		func() *ParseError {
 			itemPtrV = reflect.New(ruleField.BaseType)
 			return ParseWithOptions(itemPtrV.Interface(), s, ruleField.TokenOptions)
@@ -158,9 +158,9 @@ func parseRepeated(ruleField RuleField, s *ParserState) (itemsV reflect.Value, n
 	return itemsV, n, err, ok
 }
 
-// repeatCore drives the parsing of a repeated field, honouring its size, sep
-// and trail options.  parseItem must parse one item at the current position
-// and keep is called for each item that is retained.  It returns how many
+// repeatCore drives the parsing of a repeated field, honouring its size, sep,
+// trail and drop options.  parseItem must parse one item at the current
+// position and keep is called for each item that is retained.  It returns how many
 // items were kept, the error that stopped the repetition (nil if it stopped
 // because Max was reached) and whether at least Min items were found.  When
 // ok is false the stream is restored to where the field started; otherwise it
@@ -171,6 +171,7 @@ func repeatCore(s *ParserState, opts RepeatOptions, parseItem func() *ParseError
 	hasSep := len(opts.Sep.TokenParseOptions) > 0
 	for opts.Max == 0 || n < opts.Max {
 		itemStart := s.Save()
+		opts.Drop.DropMatchingNextTokens(s)
 		if n > 0 && hasSep && opts.Trail != TrailRequired {
 			// A separator before every item but the first.
 			if _, sepErr := opts.Sep.MatchNextToken(s); sepErr != nil {
@@ -178,6 +179,7 @@ func repeatCore(s *ParserState, opts RepeatOptions, parseItem func() *ParseError
 				s.Restore(itemStart)
 				break
 			}
+			opts.Drop.DropMatchingNextTokens(s)
 		}
 		afterSep := s.Save()
 		if itemErr := parseItem(); itemErr != nil {
@@ -192,6 +194,7 @@ func repeatCore(s *ParserState, opts RepeatOptions, parseItem func() *ParseError
 		}
 		if hasSep && opts.Trail == TrailRequired {
 			// A separator after every item, including the last.
+			opts.Drop.DropMatchingNextTokens(s)
 			if _, sepErr := opts.Sep.MatchNextToken(s); sepErr != nil {
 				err = err.Merge(sepErr)
 				s.Restore(itemStart)

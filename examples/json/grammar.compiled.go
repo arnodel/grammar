@@ -8,7 +8,7 @@ import grammar "github.com/arnodel/grammar"
 
 var (
 	_Array_Open_tok  = grammar.TokenOptionsFromTag("op,[")
-	_Array_Items_rep = grammar.MustRepeatOptions("", "op,,", "")
+	_Array_Items_rep = grammar.MustRepeatOptions("", "op,,", "", "")
 	_Array_Close_tok = grammar.TokenOptionsFromTag("op,]")
 )
 
@@ -73,7 +73,7 @@ func (r *Bool) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err
 
 var (
 	_Dict_Open_tok  = grammar.TokenOptionsFromTag("op,{")
-	_Dict_Items_rep = grammar.MustRepeatOptions("", "op,,", "")
+	_Dict_Items_rep = grammar.MustRepeatOptions("", "op,,", "", "")
 	_Dict_Close_tok = grammar.TokenOptionsFromTag("op,}")
 )
 

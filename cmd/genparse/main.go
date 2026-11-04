@@ -274,7 +274,7 @@ func fieldsFromAST(astField *ast.Field, rule *Rule) ([]*Field, error) {
 	}
 	// Validate the tags the same way the runtime does.
 	if proto.Array {
-		if _, err := grammar.RepeatOptionsFromTags(proto.Size, proto.Sep, proto.Trail); err != nil {
+		if _, err := grammar.RepeatOptionsFromTags(proto.Size, proto.Sep, proto.Trail, rule.Drop); err != nil {
 			return nil, fmt.Errorf("field %s of rule type %s: %w", fieldNames(astField), rule.Name, err)
 		}
 	} else {
@@ -371,7 +371,7 @@ var (
 	_{{ $r.Name }}_{{ .Name }}_tok = {{ $g }}.TokenOptionsFromTag({{ quote .Tok }})
 {{- end }}
 {{- if .Array }}
-	_{{ $r.Name }}_{{ .Name }}_rep = {{ $g }}.MustRepeatOptions({{ quote .Size }}, {{ quote .Sep }}, {{ quote .Trail }})
+	_{{ $r.Name }}_{{ .Name }}_rep = {{ $g }}.MustRepeatOptions({{ quote .Size }}, {{ quote .Sep }}, {{ quote .Trail }}, {{ quote $r.Drop }})
 {{- end }}
 {{- end }}
 )

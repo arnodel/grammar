@@ -8,7 +8,7 @@ import grammar "github.com/arnodel/grammar"
 
 var (
 	_List_OpenBkt_tok  = grammar.TokenOptionsFromTag("bkt,(")
-	_List_Items_rep    = grammar.MustRepeatOptions("", "", "")
+	_List_Items_rep    = grammar.MustRepeatOptions("", "", "", "")
 	_List_CloseBkt_tok = grammar.TokenOptionsFromTag("bkt,)")
 )
 
