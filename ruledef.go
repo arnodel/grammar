@@ -55,6 +55,18 @@ type TokenOptions struct {
 	TokenParseOptions []TokenParseOptions
 }
 
+// RepeatOptions gathers the options of a repeated field.
+type RepeatOptions struct {
+	SizeOptions
+	Sep   TokenOptions
+	Trail TrailMode
+}
+
+// RepeatOptions returns the repeat options of the field.
+func (f RuleField) RepeatOptions() RepeatOptions {
+	return RepeatOptions{SizeOptions: f.SizeOptions, Sep: f.SepOptions, Trail: f.Trail}
+}
+
 // Key returns a comparable value identifying the options, for use by
 // Memoisable rules whose Parse result depends on them.
 func (o TokenOptions) Key() any {
@@ -98,6 +110,8 @@ const (
 	// separator (it acts as a terminator), e.g. `1; 2;`.
 	TrailRequired
 )
+
+var errTrailWithoutSep = errors.New("trail tag without a sep tag")
 
 func trailModeFromTagValue(v string) (TrailMode, error) {
 	switch v {
@@ -246,7 +260,7 @@ func calcRuleDef(tp reflect.Type) (*RuleDef, error) {
 			Index:        fieldIndex,
 		}
 		if trail != TrailNone && len(ruleField.SepOptions.TokenParseOptions) == 0 {
-			return nil, fmt.Errorf("field %s of rule type %s has a trail tag but no sep tag", field.Name, tp)
+			return nil, fmt.Errorf("field %s of rule type %s: %w", field.Name, tp, errTrailWithoutSep)
 		}
 		switch field.Type.Kind() {
 		case reflect.Ptr:

@@ -135,42 +135,54 @@ func (Seq) Parse(r interface{}, s *ParserState, opts TokenOptions) *ParseError {
 		}
 	}
 	if itemCount == 0 {
-		pos := s.Save()
-		tok := s.Next()
-		return &ParseError{
-			Token: tok,
-			Err:   fmt.Errorf("empty match for rule %s", ruleDef.Name),
-			Pos:   pos,
-		}
+		return emptyMatchError(s, ruleDef.Name)
 	}
 	return nil
 }
 
-// parseRepeated parses the items of a repeated (slice) field, honouring its
-// size, sep and trail options.  It returns the slice of items, how many there
-// are, the error that stopped the repetition (nil if it stopped because Max
-// was reached) and whether at least Min items were found.  When ok is false
-// the stream is restored to where the field started; otherwise it is left
-// after the last item (and after its separator, if the trail mode allows one).
+// parseRepeated parses the items of a repeated (slice) field by reflection,
+// using repeatCore for the logic.  It returns the slice of items, how many
+// there are, the error that stopped the repetition (nil if it stopped because
+// Max was reached) and whether at least Min items were found.
 func parseRepeated(ruleField RuleField, s *ParserState) (itemsV reflect.Value, n int, err *ParseError, ok bool) {
 	itemsV = reflect.Zero(reflect.SliceOf(ruleField.BaseType))
+	var itemPtrV reflect.Value
+	n, err, ok = repeatCore(s, ruleField.RepeatOptions(),
+		func() *ParseError {
+			itemPtrV = reflect.New(ruleField.BaseType)
+			return ParseWithOptions(itemPtrV.Interface(), s, ruleField.TokenOptions)
+		},
+		func() {
+			itemsV = reflect.Append(itemsV, itemPtrV.Elem())
+		})
+	return itemsV, n, err, ok
+}
+
+// repeatCore drives the parsing of a repeated field, honouring its size, sep
+// and trail options.  parseItem must parse one item at the current position
+// and keep is called for each item that is retained.  It returns how many
+// items were kept, the error that stopped the repetition (nil if it stopped
+// because Max was reached) and whether at least Min items were found.  When
+// ok is false the stream is restored to where the field started; otherwise it
+// is left after the last item (and after its separator, if the trail mode
+// allows one).
+func repeatCore(s *ParserState, opts RepeatOptions, parseItem func() *ParseError, keep func()) (n int, err *ParseError, ok bool) {
 	fieldStart := s.Save()
-	hasSep := len(ruleField.SepOptions.TokenParseOptions) > 0
-	for ruleField.Max == 0 || n < ruleField.Max {
+	hasSep := len(opts.Sep.TokenParseOptions) > 0
+	for opts.Max == 0 || n < opts.Max {
 		itemStart := s.Save()
-		if n > 0 && hasSep && ruleField.Trail != TrailRequired {
+		if n > 0 && hasSep && opts.Trail != TrailRequired {
 			// A separator before every item but the first.
-			if _, sepErr := ruleField.SepOptions.MatchNextToken(s); sepErr != nil {
+			if _, sepErr := opts.Sep.MatchNextToken(s); sepErr != nil {
 				err = err.Merge(sepErr)
 				s.Restore(itemStart)
 				break
 			}
 		}
 		afterSep := s.Save()
-		itemPtrV := reflect.New(ruleField.BaseType)
-		if itemErr := ParseWithOptions(itemPtrV.Interface(), s, ruleField.TokenOptions); itemErr != nil {
+		if itemErr := parseItem(); itemErr != nil {
 			err = err.Merge(itemErr)
-			if ruleField.Trail == TrailOptional {
+			if opts.Trail == TrailOptional {
 				// Keep the separator that preceded the failed item.
 				s.Restore(afterSep)
 			} else {
@@ -178,22 +190,35 @@ func parseRepeated(ruleField RuleField, s *ParserState) (itemsV reflect.Value, n
 			}
 			break
 		}
-		if hasSep && ruleField.Trail == TrailRequired {
+		if hasSep && opts.Trail == TrailRequired {
 			// A separator after every item, including the last.
-			if _, sepErr := ruleField.SepOptions.MatchNextToken(s); sepErr != nil {
+			if _, sepErr := opts.Sep.MatchNextToken(s); sepErr != nil {
 				err = err.Merge(sepErr)
 				s.Restore(itemStart)
 				break
 			}
 		}
-		itemsV = reflect.Append(itemsV, itemPtrV.Elem())
+		keep()
 		n++
 	}
-	if n < ruleField.Min {
+	if n < opts.Min {
 		s.Restore(fieldStart)
-		return itemsV, n, err, false
+		return n, err, false
 	}
-	return itemsV, n, err, true
+	return n, err, true
+}
+
+// emptyMatchError is the error for a Seq rule none of whose fields matched
+// anything.
+func emptyMatchError(s *ParserState, ruleName string) *ParseError {
+	pos := s.Save()
+	tok := s.Next()
+	s.Restore(pos)
+	return &ParseError{
+		Token: tok,
+		Err:   fmt.Errorf("empty match for rule %s", ruleName),
+		Pos:   pos,
+	}
 }
 
 type Tok struct {
