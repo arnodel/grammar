@@ -58,30 +58,14 @@ func (OneOf) Parse(r interface{}, s *ParserState, opts TokenOptions) *ParseError
 				err = err.Merge(fieldErr)
 			}
 		case ruleField.Array:
-			{
-				itemsV := reflect.Zero(reflect.SliceOf(ruleField.BaseType))
-				var sz int
-				arrStart := s.Save()
-				for sz = 0; ruleField.Max == 0 || sz < ruleField.Max; sz++ {
-					start := s.Save()
-					itemPtrV := reflect.New(ruleField.BaseType)
-					fieldErr = ParseWithOptions(itemPtrV.Interface(), s, ruleField.TokenOptions)
-					if fieldErr != nil {
-						if sz < ruleField.Min {
-							s.Restore(arrStart)
-							break
-						}
-						s.Restore(start)
-						if sz > 0 {
-							elem.Field(ruleField.Index).Set(itemsV)
-							return nil
-						}
-						err = err.Merge(fieldErr)
-						break
-					}
-					itemsV = reflect.Append(itemsV, itemPtrV.Elem())
-				}
+			itemsV, n, arrErr, ok := parseRepeated(ruleField, s)
+			err = err.Merge(arrErr)
+			if ok && n > 0 {
+				elem.Field(ruleField.Index).Set(itemsV)
+				return nil
 			}
+			// Nothing matched (or too few items): the stream is back where
+			// it was, try the next alternative.
 		default:
 			panic("should not get here")
 		}
@@ -121,32 +105,13 @@ func (Seq) Parse(r interface{}, s *ParserState, opts TokenOptions) *ParseError {
 				}
 			}
 		case ruleField.Array:
-			{
-				itemsV := reflect.Zero(reflect.SliceOf(ruleField.BaseType))
-				var sz int
-				for sz = 0; ruleField.Max == 0 || sz < ruleField.Max; sz++ {
-					start := s.Save()
-					fieldPtrV = reflect.New(ruleField.BaseType)
-					fieldErr = ParseWithOptions(fieldPtrV.Interface(), s, ruleField.TokenOptions)
-					if fieldErr != nil {
-						err = err.Merge(fieldErr)
-						if sz < ruleField.Min {
-							return err
-						}
-						s.Restore(start)
-						break
-					}
-					itemsV = reflect.Append(itemsV, fieldPtrV.Elem())
-					itemCount++
-					start = s.Save()
-					_, err := ruleField.SepOptions.MatchNextToken(s)
-					if err != nil {
-						s.Restore(start)
-						break
-					}
-				}
-				elem.Field(ruleField.Index).Set(itemsV)
+			itemsV, n, arrErr, ok := parseRepeated(ruleField, s)
+			err = err.Merge(arrErr)
+			if !ok {
+				return err
 			}
+			elem.Field(ruleField.Index).Set(itemsV)
+			itemCount += n
 		default:
 			fieldPtrV = reflect.New(ruleField.BaseType)
 			fieldErr = ParseWithOptions(fieldPtrV.Interface(), s, ruleField.TokenOptions)
@@ -167,6 +132,56 @@ func (Seq) Parse(r interface{}, s *ParserState, opts TokenOptions) *ParseError {
 		}
 	}
 	return nil
+}
+
+// parseRepeated parses the items of a repeated (slice) field, honouring its
+// size, sep and trail options.  It returns the slice of items, how many there
+// are, the error that stopped the repetition (nil if it stopped because Max
+// was reached) and whether at least Min items were found.  When ok is false
+// the stream is restored to where the field started; otherwise it is left
+// after the last item (and after its separator, if the trail mode allows one).
+func parseRepeated(ruleField RuleField, s *ParserState) (itemsV reflect.Value, n int, err *ParseError, ok bool) {
+	itemsV = reflect.Zero(reflect.SliceOf(ruleField.BaseType))
+	fieldStart := s.Save()
+	hasSep := len(ruleField.SepOptions.TokenParseOptions) > 0
+	for ruleField.Max == 0 || n < ruleField.Max {
+		itemStart := s.Save()
+		if n > 0 && hasSep && ruleField.Trail != TrailRequired {
+			// A separator before every item but the first.
+			if _, sepErr := ruleField.SepOptions.MatchNextToken(s); sepErr != nil {
+				err = err.Merge(sepErr)
+				s.Restore(itemStart)
+				break
+			}
+		}
+		afterSep := s.Save()
+		itemPtrV := reflect.New(ruleField.BaseType)
+		if itemErr := ParseWithOptions(itemPtrV.Interface(), s, ruleField.TokenOptions); itemErr != nil {
+			err = err.Merge(itemErr)
+			if ruleField.Trail == TrailOptional {
+				// Keep the separator that preceded the failed item.
+				s.Restore(afterSep)
+			} else {
+				s.Restore(itemStart)
+			}
+			break
+		}
+		if hasSep && ruleField.Trail == TrailRequired {
+			// A separator after every item, including the last.
+			if _, sepErr := ruleField.SepOptions.MatchNextToken(s); sepErr != nil {
+				err = err.Merge(sepErr)
+				s.Restore(itemStart)
+				break
+			}
+		}
+		itemsV = reflect.Append(itemsV, itemPtrV.Elem())
+		n++
+	}
+	if n < ruleField.Min {
+		s.Restore(fieldStart)
+		return itemsV, n, err, false
+	}
+	return itemsV, n, err, true
 }
 
 type Tok struct {

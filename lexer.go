@@ -91,12 +91,25 @@ func (t *SimpleToken) Parse(_ interface{}, s *ParserState, opts TokenOptions) *P
 type SimpleTokenStream struct {
 	tokens     []Token
 	currentPos int
+	eof        Token // returned once the tokens are exhausted
 }
 
+// NewSimpleTokenStream makes a token stream from a slice of tokens.  The EOF
+// token it returns at the end is positioned just after the last token.
 func NewSimpleTokenStream(toks []Token) *SimpleTokenStream {
+	pos := Position{Line: 1, Column: 1}
+	if n := len(toks); n > 0 {
+		pos = toks[n-1].Position()
+		pos.Advance(toks[n-1].Value())
+	}
 	return &SimpleTokenStream{
 		tokens: toks,
+		eof:    eofAt(pos),
 	}
+}
+
+func eofAt(pos Position) SimpleToken {
+	return SimpleToken{TokType: EOF.TokType, TokValue: EOF.TokValue, TokPos: pos}
 }
 
 var _ TokenStream = (*SimpleTokenStream)(nil)
@@ -105,7 +118,9 @@ var _ TokenStream = (*SimpleTokenStream)(nil)
 // stream is exhausted, EOF is returned.
 func (s *SimpleTokenStream) Next() Token {
 	if s.currentPos >= len(s.tokens) {
-		// log.Printf("Next token %d: EOF", s.currentPos)
+		if s.eof != nil {
+			return s.eof
+		}
 		return EOF
 	}
 	tok := s.tokens[s.currentPos]
@@ -211,6 +226,6 @@ func SimpleTokeniser(tokenDefs []TokenDef) func(string) (*SimpleTokenStream, err
 			s = s[len(tokValue):]
 			pos.Advance(tokValue)
 		}
-		return &SimpleTokenStream{tokens: toks}, nil
+		return &SimpleTokenStream{tokens: toks, eof: eofAt(pos)}, nil
 	}
 }

@@ -20,6 +20,7 @@ type RuleField struct {
 	TokenOptions
 	SizeOptions
 	SepOptions TokenOptions
+	Trail      TrailMode
 	Name       string
 	Index      int
 }
@@ -56,6 +57,35 @@ type TokenOptions struct {
 
 type SizeOptions struct {
 	Min, Max int
+}
+
+// TrailMode says what a repeated field with a separator does about a
+// separator after the last item.  It is set with the "trail" struct tag.
+type TrailMode int
+
+const (
+	// TrailNone (the default): items are separated, a trailing separator is
+	// not part of the field, e.g. `1, 2`.
+	TrailNone TrailMode = iota
+	// TrailOptional: a trailing separator is accepted but not required, e.g.
+	// `1, 2` or `1, 2,`.
+	TrailOptional
+	// TrailRequired: every item, including the last, must be followed by the
+	// separator (it acts as a terminator), e.g. `1; 2;`.
+	TrailRequired
+)
+
+func trailModeFromTagValue(v string) (TrailMode, error) {
+	switch v {
+	case "":
+		return TrailNone, nil
+	case "optional":
+		return TrailOptional, nil
+	case "required":
+		return TrailRequired, nil
+	default:
+		return TrailNone, fmt.Errorf("invalid trail tag value %q (want optional or required)", v)
+	}
 }
 
 func (o TokenOptions) MatchNextToken(s TokenStream) (Token, *ParseError) {
@@ -179,12 +209,20 @@ func calcRuleDef(tp reflect.Type) (*RuleDef, error) {
 		if err != nil {
 			return nil, err
 		}
+		trail, err := trailModeFromTagValue(field.Tag.Get("trail"))
+		if err != nil {
+			return nil, fmt.Errorf("field %s of rule type %s: %w", field.Name, tp, err)
+		}
 		ruleField := RuleField{
 			TokenOptions: tokenOptionsFromTagValue(field.Tag.Get("tok")),
 			SepOptions:   tokenOptionsFromTagValue(field.Tag.Get("sep")),
 			SizeOptions:  sizeOpts,
+			Trail:        trail,
 			Name:         field.Name,
 			Index:        fieldIndex,
+		}
+		if trail != TrailNone && len(ruleField.SepOptions.TokenParseOptions) == 0 {
+			return nil, fmt.Errorf("field %s of rule type %s has a trail tag but no sep tag", field.Name, tp)
 		}
 		switch field.Type.Kind() {
 		case reflect.Ptr:

@@ -227,9 +227,7 @@ var errRecursion = errors.New("recursion")
 
 func (e *ParseError) Error() string {
 	var hint string
-	if e.Err != nil {
-		hint = e.Err.Error()
-	} else if len(e.TokenParseOptions) != 0 {
+	if len(e.TokenParseOptions) != 0 {
 		var b strings.Builder
 		b.WriteString("expected token with ")
 		types, values := summariseOptions(e.TokenParseOptions)
@@ -255,6 +253,12 @@ func (e *ParseError) Error() string {
 			}
 		}
 		hint = b.String()
+	}
+	if e.Err != nil {
+		if hint != "" {
+			hint += "; "
+		}
+		hint += e.Err.Error()
 	}
 	return fmt.Sprintf("%s: %s with value %q: %s", e.Token.Position(), e.Token.Type(), e.Token.Value(), hint)
 }
@@ -308,10 +312,33 @@ func (e *ParseError) Merge(e2 *ParseError) *ParseError {
 			}
 		}
 	}
+	mergedErr := mergeErrs(e.Err, e2.Err)
+	if mergedErr == errRecursion && len(opts) > 0 {
+		// The expected tokens are the useful message; the marker is not.
+		mergedErr = nil
+	}
 	return &ParseError{
+		Err:               mergedErr,
 		Token:             e.Token,
 		TokenParseOptions: opts,
 		Pos:               e.Pos,
+	}
+}
+
+// mergeErrs picks the Err to keep when merging two ParseErrors at the same
+// position: the first one that is not the internal left-recursion marker,
+// which is only meaningful to the memoisation and should not reach users
+// when there is anything better to say.
+func mergeErrs(err1, err2 error) error {
+	switch {
+	case err1 != nil && err1 != errRecursion:
+		return err1
+	case err2 != nil && err2 != errRecursion:
+		return err2
+	case err1 != nil:
+		return err1
+	default:
+		return err2
 	}
 }
 
