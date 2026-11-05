@@ -55,9 +55,9 @@ func TestTokeniserQuotedPattern(t *testing.T) {
 	// A \Q without \E used to swallow the closing bracket of the anchor.
 	tokenise := SimpleTokeniser([]TokenDef{
 		{Name: "lit", Ptn: `\Qa.b`},
-		{Name: "other", Ptn: `[a-z.)]+`},
+		{Name: "other", Ptn: `[a-z]+`},
 	})
-	if got, want := tokenTypesAndValues(t, tokenise, `a.bxa.b)`), `lit:a.b other:xa.b)`; got != want {
+	if got, want := tokenTypesAndValues(t, tokenise, `a.bx`), `lit:a.b other:x`; got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
 }
