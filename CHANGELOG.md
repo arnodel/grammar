@@ -31,6 +31,12 @@ the breaking changes are listed last.
 - `SimpleTokeniser` patterns may contain capturing groups.
 - `ParserState.Fail`, for custom rules to report a failure that is not a
   token mismatch.
+- `ParserState.Peek`, returning the next token without consuming it.
+- First sets: a `OneOf` alternative, an optional field or a repeated item
+  that cannot start with the next token is skipped without being allocated
+  or parsed.  First sets are computed from the rule definitions; a custom
+  rule or a rule that can match nothing is never skipped.  `FirstSet` and
+  `FirstSetOf` expose them to generated code.
 
 ### Fixed
 
@@ -56,6 +62,7 @@ the breaking changes are listed last.
   entries allocated in blocks, instead of a map allocating one entry per
   memoised parse; together with the previous item this makes the json
   example parse about seven times faster than before the two changes.
+- First sets (see above) make the json example parse another third faster.
 
 ### Breaking changes
 
@@ -78,6 +85,10 @@ the breaking changes are listed last.
   `Scan`, or pushes an unknown mode.
 - `TokenOptions.MatchNextToken` takes a `*ParserState` rather than a
   `TokenStream`, as it records the failure.
+- `RepeatOptions` has a `First` field and `RuleField.RepeatOptions` takes
+  it; `ParseOptional` takes a `FirstSet` and `RepeatOptionsFromTags` and
+  `MustRepeatOptions` are generic in the item type and take the `tok` tag,
+  to compute it.  Generated code must be regenerated.
 - The `*ParseError` returned by a failing rule is shared by all failures of
   the parse and describes the furthest one, not necessarily the rule's own.
   `ParserState.MergeError` is gone; `ParseError.Merge` remains for custom

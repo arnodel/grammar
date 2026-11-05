@@ -13,6 +13,7 @@ type RuleDef struct {
 	OneOf       bool
 	DropOptions TokenOptions
 	Fields      []RuleField
+	firsts      []FirstSet // of the fields, filled by computeFirstSets
 }
 
 type RuleField struct {
@@ -55,19 +56,20 @@ type TokenOptions struct {
 	TokenParseOptions []TokenParseOptions
 }
 
-// RepeatOptions gathers the options of a repeated field, and the drop
-// options of its rule.
+// RepeatOptions gathers the options of a repeated field, the drop options of
+// its rule and the first set of its items.
 type RepeatOptions struct {
 	SizeOptions
 	Sep   TokenOptions
 	Trail TrailMode
 	Drop  TokenOptions // tokens to skip before each item and separator
+	First FirstSet     // of an item
 }
 
 // RepeatOptions returns the repeat options of the field, with the given drop
-// options.
-func (f RuleField) RepeatOptions(drop TokenOptions) RepeatOptions {
-	return RepeatOptions{SizeOptions: f.SizeOptions, Sep: f.SepOptions, Trail: f.Trail, Drop: drop}
+// options and item first set.
+func (f RuleField) RepeatOptions(drop TokenOptions, first FirstSet) RepeatOptions {
+	return RepeatOptions{SizeOptions: f.SizeOptions, Sep: f.SepOptions, Trail: f.Trail, Drop: drop, First: first}
 }
 
 // Key returns a comparable value identifying the options, for use by
@@ -140,13 +142,8 @@ func (o TokenOptions) MatchNextToken(s *ParserState) (Token, *ParseError) {
 	tok := s.Next()
 
 	for _, opts := range o.TokenParseOptions {
-		if opts.TokenType != "" && opts.TokenType != tok.Type() {
+		if !opts.matches(tok) {
 			continue
-			// return fmt.Errorf("expected token of type %s", opts.TokenType)
-		}
-		if opts.TokenValue != "" && opts.TokenValue != tok.Value() {
-			continue
-			// return fmt.Errorf("expected token with value %q", opts.TokenValue)
 		}
 		if opts.DoNotConsume {
 			s.Restore(pos)
@@ -156,27 +153,24 @@ func (o TokenOptions) MatchNextToken(s *ParserState) (Token, *ParseError) {
 	return tok, s.recordFailure(pos, tok, o.TokenParseOptions, nil)
 }
 
+// matches reports whether tok has the type and value required by o.
+func (o TokenParseOptions) matches(tok Token) bool {
+	return (o.TokenType == "" || o.TokenType == tok.Type()) &&
+		(o.TokenValue == "" || o.TokenValue == tok.Value())
+}
+
 func (o TokenOptions) DropMatchingNextTokens(s TokenStream) {
 	if len(o.TokenParseOptions) == 0 {
 		return
 	}
 
-outerLoop:
 	for {
 		pos := s.Save()
 		tok := s.Next()
-
-		for _, opts := range o.TokenParseOptions {
-			if opts.TokenType != "" && opts.TokenType != tok.Type() {
-				continue
-			}
-			if opts.TokenValue != "" && opts.TokenValue != tok.Value() {
-				continue
-			}
-			continue outerLoop
+		if !matchesAny(o.TokenParseOptions, tok) {
+			s.Restore(pos)
+			return
 		}
-		s.Restore(pos)
-		return
 	}
 }
 
@@ -197,7 +191,19 @@ func getRuleDefAndValue(r any) (*RuleDef, reflect.Value) {
 	return ruleDef, elem
 }
 
+// getRuleDef returns the rule definition of tp, with the first sets of its
+// fields.
 func getRuleDef(tp reflect.Type) (*RuleDef, error) {
+	ruleDef, err := getRuleDefBare(tp)
+	if err == nil && ruleDef.firsts == nil {
+		computeFirstSets(tp)
+	}
+	return ruleDef, err
+}
+
+// getRuleDefBare returns the rule definition of tp, maybe without the first
+// sets of its fields (which computeFirstSets fills in).
+func getRuleDefBare(tp reflect.Type) (*RuleDef, error) {
 	cached, ok := ruleDefCache[tp]
 	if ok {
 		return cached.ruleDef, cached.err

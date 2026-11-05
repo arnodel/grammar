@@ -227,6 +227,14 @@ type TokenStream interface {
 	Restore(int) // Return the stream to the given position.
 }
 
+// Peek returns the next token without consuming it.
+func (s *ParserState) Peek() Token {
+	pos := s.Save()
+	tok := s.Next()
+	s.Restore(pos)
+	return tok
+}
+
 type ParseOption func(s *ParserState)
 
 func WithLogger(l *log.Logger) ParseOption {

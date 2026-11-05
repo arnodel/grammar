@@ -159,7 +159,7 @@ func (r *Rule) HasVars() bool {
 		return true
 	}
 	for _, f := range r.Fields {
-		if f.Tok != "" || f.Array {
+		if f.Tok != "" || f.Array || f.Pointer {
 			return true
 		}
 	}
@@ -274,7 +274,7 @@ func fieldsFromAST(astField *ast.Field, rule *Rule) ([]*Field, error) {
 	}
 	// Validate the tags the same way the runtime does.
 	if proto.Array {
-		if _, err := grammar.RepeatOptionsFromTags(proto.Size, proto.Sep, proto.Trail, rule.Drop); err != nil {
+		if _, err := grammar.RepeatOptionsFromTags[grammar.Empty](proto.Size, proto.Sep, proto.Trail, rule.Drop, proto.Tok); err != nil {
 			return nil, fmt.Errorf("field %s of rule type %s: %w", fieldNames(astField), rule.Name, err)
 		}
 	} else {
@@ -371,7 +371,10 @@ var (
 	_{{ $r.Name }}_{{ .Name }}_tok = {{ $g }}.TokenOptionsFromTag({{ quote .Tok }})
 {{- end }}
 {{- if .Array }}
-	_{{ $r.Name }}_{{ .Name }}_rep = {{ $g }}.MustRepeatOptions({{ quote .Size }}, {{ quote .Sep }}, {{ quote .Trail }}, {{ quote $r.Drop }})
+	_{{ $r.Name }}_{{ .Name }}_rep = {{ $g }}.MustRepeatOptions[{{ .BaseType }}]({{ quote .Size }}, {{ quote .Sep }}, {{ quote .Trail }}, {{ quote $r.Drop }}, {{ quote .Tok }})
+{{- end }}
+{{- if .Pointer }}
+	_{{ $r.Name }}_{{ .Name }}_first = {{ $g }}.FirstSetOf[{{ .BaseType }}]({{ template "tok" (list $r .) }})
 {{- end }}
 {{- end }}
 )
@@ -391,7 +394,7 @@ func (r *{{ .Name }}) Parse(_ any, s *{{ $g }}.ParserState, _ {{ $g }}.TokenOpti
 	_{{ $r.Name }}_drop.DropMatchingNextTokens(s)
 {{- end }}
 {{- if .Pointer }}
-	if item, fieldErr := {{ $g }}.ParseOptional[{{ .BaseType }}](s, {{ template "tok" (list $r .) }}); fieldErr != nil {
+	if item, fieldErr := {{ $g }}.ParseOptional[{{ .BaseType }}](s, {{ template "tok" (list $r .) }}, _{{ $r.Name }}_{{ .Name }}_first); fieldErr != nil {
 		err = err.Merge(fieldErr)
 	} else {
 		r.{{ .Name }} = item
@@ -427,7 +430,7 @@ func (r *{{ .Name }}) Parse(_ any, s *{{ $g }}.ParserState, _ {{ $g }}.TokenOpti
 {{- range .Fields }}
 	// {{ .Name }} {{ .Type }}
 {{- if .Pointer }}
-	if item, fieldErr := {{ $g }}.ParseOptional[{{ .BaseType }}](s, {{ template "tok" (list $r .) }}); fieldErr == nil {
+	if item, fieldErr := {{ $g }}.ParseOptional[{{ .BaseType }}](s, {{ template "tok" (list $r .) }}, _{{ $r.Name }}_{{ .Name }}_first); fieldErr == nil {
 		r.{{ .Name }} = item
 		return nil
 	} else {
