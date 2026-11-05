@@ -225,25 +225,34 @@ type ttErrSeq struct {
 	Close Match `tok:"op,)"`
 }
 
+type ttErrItems struct {
+	Seq
+	Items []ttNum `sep:"op,,"`
+}
+
 func TestErrorMessages(t *testing.T) {
 	tests := []struct {
+		rule func() any
 		src  string
 		want string
 	}{
 		// Position, token and alternatives at the furthest failure.
-		{`(1 2 x`, `Ln 1, Col 6: word with value "x": expected token with type number, or value ")"`},
-		{`(1`, `Ln 1, Col 3: EOF with value "EOF": expected token with type number, or value ")"`},
-		{`x`, `Ln 1, Col 1: word with value "x": expected token with value "("`},
+		{func() any { return &ttErrSeq{} }, `(1 2 x`, `Ln 1, Col 6: word with value "x": expected token with type number, or value ")"`},
+		{func() any { return &ttErrSeq{} }, `(1`, `Ln 1, Col 3: EOF with value "EOF": expected token with type number, or value ")"`},
+		{func() any { return &ttErrSeq{} }, `x`, `Ln 1, Col 1: word with value "x": expected token with value "("`},
+		// A separator that failed to match is an alternative too, even though
+		// the rule succeeded without it.
+		{func() any { return &ttErrItems{} }, `1 2`, `Ln 1, Col 3: number with value "2": expected token with value ","; expected end of input`},
 	}
 	for _, tt := range tests {
 		toks, _ := SimpleTokeniser([]TokenDef{
 			{Ptn: `\s+`},
-			{Name: "op", Ptn: `[()]`},
+			{Name: "op", Ptn: `[(),]`},
 			{Name: "number", Ptn: `[0-9]+`},
 			{Name: "word", Ptn: `[a-z]+`},
 		})(tt.src)
-		var r ttErrSeq
-		err := Parse(&r, toks, Exhaust)
+		r := tt.rule()
+		err := Parse(r, toks, Exhaust)
 		if err == nil {
 			t.Errorf("%q: expected an error", tt.src)
 			continue

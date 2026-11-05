@@ -129,7 +129,10 @@ func trailModeFromTagValue(v string) (TrailMode, error) {
 	}
 }
 
-func (o TokenOptions) MatchNextToken(s TokenStream) (Token, *ParseError) {
+// MatchNextToken consumes the next token of the stream if it matches one of
+// the options and returns it.  If it does not, the failure is recorded (see
+// ParserState.Fail) and the error returned with the token.
+func (o TokenOptions) MatchNextToken(s *ParserState) (Token, *ParseError) {
 	if len(o.TokenParseOptions) == 0 {
 		return SimpleToken{}, nil
 	}
@@ -150,11 +153,7 @@ func (o TokenOptions) MatchNextToken(s TokenStream) (Token, *ParseError) {
 		}
 		return tok, nil
 	}
-	return tok, &ParseError{
-		Token:             tok,
-		TokenParseOptions: o.TokenParseOptions,
-		Pos:               pos,
-	}
+	return tok, s.recordFailure(pos, tok, o.TokenParseOptions, nil)
 }
 
 func (o TokenOptions) DropMatchingNextTokens(s TokenStream) {
