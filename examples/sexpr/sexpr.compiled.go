@@ -8,7 +8,7 @@ import grammar "github.com/arnodel/grammar"
 
 var (
 	_List_OpenBkt_tok  = grammar.TokenOptionsFromTag("bkt,(")
-	_List_Items_rep    = grammar.MustRepeatOptions("", "", "", "")
+	_List_Items_rep    = grammar.MustRepeatOptions[SExpr]("", "", "", "", "")
 	_List_CloseBkt_tok = grammar.TokenOptionsFromTag("bkt,)")
 )
 
@@ -50,37 +50,41 @@ func (r *List) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err
 }
 
 var (
-	_SExpr_Number_tok = grammar.TokenOptionsFromTag("number")
-	_SExpr_String_tok = grammar.TokenOptionsFromTag("string")
-	_SExpr_Atom_tok   = grammar.TokenOptionsFromTag("atom")
+	_SExpr_Number_tok   = grammar.TokenOptionsFromTag("number")
+	_SExpr_Number_first = grammar.FirstSetOf[Token](_SExpr_Number_tok)
+	_SExpr_String_tok   = grammar.TokenOptionsFromTag("string")
+	_SExpr_String_first = grammar.FirstSetOf[Token](_SExpr_String_tok)
+	_SExpr_Atom_tok     = grammar.TokenOptionsFromTag("atom")
+	_SExpr_Atom_first   = grammar.FirstSetOf[Token](_SExpr_Atom_tok)
+	_SExpr_List_first   = grammar.FirstSetOf[List](grammar.TokenOptions{})
 )
 
 // Parse implements grammar.Parser for SExpr without reflection; it
 // does what grammar.OneOf.Parse does.
 func (r *SExpr) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err *grammar.ParseError) {
 	// Number *Token
-	if item, fieldErr := grammar.ParseOptional[Token](s, _SExpr_Number_tok); fieldErr == nil {
+	if item, fieldErr := grammar.ParseOptional[Token](s, _SExpr_Number_tok, _SExpr_Number_first); fieldErr == nil {
 		r.Number = item
 		return nil
 	} else {
 		err = err.Merge(fieldErr)
 	}
 	// String *Token
-	if item, fieldErr := grammar.ParseOptional[Token](s, _SExpr_String_tok); fieldErr == nil {
+	if item, fieldErr := grammar.ParseOptional[Token](s, _SExpr_String_tok, _SExpr_String_first); fieldErr == nil {
 		r.String = item
 		return nil
 	} else {
 		err = err.Merge(fieldErr)
 	}
 	// Atom *Token
-	if item, fieldErr := grammar.ParseOptional[Token](s, _SExpr_Atom_tok); fieldErr == nil {
+	if item, fieldErr := grammar.ParseOptional[Token](s, _SExpr_Atom_tok, _SExpr_Atom_first); fieldErr == nil {
 		r.Atom = item
 		return nil
 	} else {
 		err = err.Merge(fieldErr)
 	}
 	// List *List
-	if item, fieldErr := grammar.ParseOptional[List](s, grammar.TokenOptions{}); fieldErr == nil {
+	if item, fieldErr := grammar.ParseOptional[List](s, grammar.TokenOptions{}, _SExpr_List_first); fieldErr == nil {
 		r.List = item
 		return nil
 	} else {

@@ -296,6 +296,13 @@ func (w *Word) MemoKey(opts grammar.TokenOptions) any {
 Rules that do not implement it are parsed afresh every time, which is the
 right default for cheap token-like rules.
 
+A `OneOf` does not try an alternative that cannot start with the next token,
+nor does a `Seq` try an optional field or a repeated item that cannot: the
+tokens a rule can start with (its first set) are computed from the struct
+tags.  A custom rule's first set is unknown, so it is always tried; it is
+worth putting a `Match` on a keyword or other token before a custom rule in
+a `Seq` so that the sequence as a whole can be skipped.
+
 A rule reports a token mismatch by returning the error from
 `opts.MatchNextToken(s)`, and any other failure with `s.Fail`:
 

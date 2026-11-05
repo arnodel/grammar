@@ -8,7 +8,7 @@ import grammar "github.com/arnodel/grammar"
 
 var (
 	_Array_Open_tok  = grammar.TokenOptionsFromTag("op,[")
-	_Array_Items_rep = grammar.MustRepeatOptions("", "op,,", "", "")
+	_Array_Items_rep = grammar.MustRepeatOptions[Json]("", "op,,", "", "", "")
 	_Array_Close_tok = grammar.TokenOptionsFromTag("op,]")
 )
 
@@ -73,7 +73,7 @@ func (r *Bool) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err
 
 var (
 	_Dict_Open_tok  = grammar.TokenOptionsFromTag("op,{")
-	_Dict_Items_rep = grammar.MustRepeatOptions("", "op,,", "", "")
+	_Dict_Items_rep = grammar.MustRepeatOptions[DictItem]("", "op,,", "", "", "")
 	_Dict_Close_tok = grammar.TokenOptionsFromTag("op,}")
 )
 
@@ -152,46 +152,55 @@ func (r *DictItem) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) 
 	return nil
 }
 
+var (
+	_Json_Number_first = grammar.FirstSetOf[Number](grammar.TokenOptions{})
+	_Json_String_first = grammar.FirstSetOf[String](grammar.TokenOptions{})
+	_Json_Null_first   = grammar.FirstSetOf[Null](grammar.TokenOptions{})
+	_Json_Bool_first   = grammar.FirstSetOf[Bool](grammar.TokenOptions{})
+	_Json_Array_first  = grammar.FirstSetOf[Array](grammar.TokenOptions{})
+	_Json_Dict_first   = grammar.FirstSetOf[Dict](grammar.TokenOptions{})
+)
+
 // Parse implements grammar.Parser for Json without reflection; it
 // does what grammar.OneOf.Parse does.
 func (r *Json) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err *grammar.ParseError) {
 	// Number *Number
-	if item, fieldErr := grammar.ParseOptional[Number](s, grammar.TokenOptions{}); fieldErr == nil {
+	if item, fieldErr := grammar.ParseOptional[Number](s, grammar.TokenOptions{}, _Json_Number_first); fieldErr == nil {
 		r.Number = item
 		return nil
 	} else {
 		err = err.Merge(fieldErr)
 	}
 	// String *String
-	if item, fieldErr := grammar.ParseOptional[String](s, grammar.TokenOptions{}); fieldErr == nil {
+	if item, fieldErr := grammar.ParseOptional[String](s, grammar.TokenOptions{}, _Json_String_first); fieldErr == nil {
 		r.String = item
 		return nil
 	} else {
 		err = err.Merge(fieldErr)
 	}
 	// Null *Null
-	if item, fieldErr := grammar.ParseOptional[Null](s, grammar.TokenOptions{}); fieldErr == nil {
+	if item, fieldErr := grammar.ParseOptional[Null](s, grammar.TokenOptions{}, _Json_Null_first); fieldErr == nil {
 		r.Null = item
 		return nil
 	} else {
 		err = err.Merge(fieldErr)
 	}
 	// Bool *Bool
-	if item, fieldErr := grammar.ParseOptional[Bool](s, grammar.TokenOptions{}); fieldErr == nil {
+	if item, fieldErr := grammar.ParseOptional[Bool](s, grammar.TokenOptions{}, _Json_Bool_first); fieldErr == nil {
 		r.Bool = item
 		return nil
 	} else {
 		err = err.Merge(fieldErr)
 	}
 	// Array *Array
-	if item, fieldErr := grammar.ParseOptional[Array](s, grammar.TokenOptions{}); fieldErr == nil {
+	if item, fieldErr := grammar.ParseOptional[Array](s, grammar.TokenOptions{}, _Json_Array_first); fieldErr == nil {
 		r.Array = item
 		return nil
 	} else {
 		err = err.Merge(fieldErr)
 	}
 	// Dict *Dict
-	if item, fieldErr := grammar.ParseOptional[Dict](s, grammar.TokenOptions{}); fieldErr == nil {
+	if item, fieldErr := grammar.ParseOptional[Dict](s, grammar.TokenOptions{}, _Json_Dict_first); fieldErr == nil {
 		r.Dict = item
 		return nil
 	} else {

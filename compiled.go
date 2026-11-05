@@ -1,5 +1,7 @@
 package grammar
 
+import "reflect"
+
 // This file holds the API used by the code that the genparse command
 // generates (see cmd/genparse).  Generated Parse methods replace the
 // reflection in Seq.Parse, OneOf.Parse and Tok.Parse with straight-line code
@@ -21,9 +23,15 @@ func TrailModeFromTag(tag string) (TrailMode, error) {
 	return trailModeFromTagValue(tag)
 }
 
-// RepeatOptionsFromTags parses the "size", "sep" and "trail" struct tags of a
-// repeated field and the "drop" tag of its rule.
-func RepeatOptionsFromTags(size, sep, trail, drop string) (RepeatOptions, error) {
+// FirstSetOf returns the first set of a field of type T parsed with the given
+// token options (see FirstSet).
+func FirstSetOf[T any](tokOpts TokenOptions) FirstSet {
+	return firstOfField(reflect.TypeFor[T](), tokOpts, firstOfType)
+}
+
+// RepeatOptionsFromTags parses the "size", "sep", "trail" and "tok" struct
+// tags of a repeated field of items of type T and the "drop" tag of its rule.
+func RepeatOptionsFromTags[T any](size, sep, trail, drop, tok string) (RepeatOptions, error) {
 	sizeOpts, err := sizeOptionsFromTagValue(size)
 	if err != nil {
 		return RepeatOptions{}, err
@@ -37,6 +45,7 @@ func RepeatOptionsFromTags(size, sep, trail, drop string) (RepeatOptions, error)
 		Sep:         tokenOptionsFromTagValue(sep),
 		Trail:       trailMode,
 		Drop:        tokenOptionsFromTagValue(drop),
+		First:       FirstSetOf[T](tokenOptionsFromTagValue(tok)),
 	}
 	if trailMode != TrailNone && len(opts.Sep.TokenParseOptions) == 0 {
 		return RepeatOptions{}, errTrailWithoutSep
@@ -46,8 +55,8 @@ func RepeatOptionsFromTags(size, sep, trail, drop string) (RepeatOptions, error)
 
 // MustRepeatOptions is RepeatOptionsFromTags for package-level variables in
 // generated code; it panics on an invalid tag.
-func MustRepeatOptions(size, sep, trail, drop string) RepeatOptions {
-	opts, err := RepeatOptionsFromTags(size, sep, trail, drop)
+func MustRepeatOptions[T any](size, sep, trail, drop, tok string) RepeatOptions {
+	opts, err := RepeatOptionsFromTags[T](size, sep, trail, drop, tok)
 	if err != nil {
 		panic(err)
 	}
@@ -69,9 +78,13 @@ func ParseRepeated[T any](s *ParserState, tokOpts TokenOptions, opts RepeatOptio
 	return items, n, err, ok
 }
 
-// ParseOptional parses an optional (pointer) field of type T.  On failure it
-// returns nil and the error, with the stream restored to where it was.
-func ParseOptional[T any](s *ParserState, tokOpts TokenOptions) (*T, *ParseError) {
+// ParseOptional parses an optional (pointer) field of type T, unless its
+// first set says it cannot start with the next token.  On failure it returns
+// nil and the error, with the stream restored to where it was.
+func ParseOptional[T any](s *ParserState, tokOpts TokenOptions, first FirstSet) (*T, *ParseError) {
+	if err := first.check(s); err != nil {
+		return nil, err
+	}
 	start := s.Save()
 	item := new(T)
 	if err := ParseWithOptions(item, s, tokOpts); err != nil {

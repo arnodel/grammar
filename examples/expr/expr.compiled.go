@@ -6,18 +6,23 @@ package expr
 
 import grammar "github.com/arnodel/grammar"
 
+var (
+	_Expr_Sum_first = grammar.FirstSetOf[Sum](grammar.TokenOptions{})
+	_Expr_Num_first = grammar.FirstSetOf[Num](grammar.TokenOptions{})
+)
+
 // Parse implements grammar.Parser for Expr without reflection; it
 // does what grammar.OneOf.Parse does.
 func (r *Expr) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err *grammar.ParseError) {
 	// Sum *Sum
-	if item, fieldErr := grammar.ParseOptional[Sum](s, grammar.TokenOptions{}); fieldErr == nil {
+	if item, fieldErr := grammar.ParseOptional[Sum](s, grammar.TokenOptions{}, _Expr_Sum_first); fieldErr == nil {
 		r.Sum = item
 		return nil
 	} else {
 		err = err.Merge(fieldErr)
 	}
 	// Num *Num
-	if item, fieldErr := grammar.ParseOptional[Num](s, grammar.TokenOptions{}); fieldErr == nil {
+	if item, fieldErr := grammar.ParseOptional[Num](s, grammar.TokenOptions{}, _Expr_Num_first); fieldErr == nil {
 		r.Num = item
 		return nil
 	} else {
