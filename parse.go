@@ -28,15 +28,10 @@ type memoValue struct {
 // memoTable holds the memo entries by stream position.  Positions are small
 // dense integers and few rules are tried at each, so a slice of short lists
 // beats a map, and entries are allocated in blocks rather than one by one.
-// A block is an array, so entries never move and pointers to them stay
-// valid; a full block is dropped by the table, the lists keep it alive.
 type memoTable struct {
-	heads []*memoValue // by position
-	block *[memoBlockSize]memoValue
-	used  int // entries of block handed out
+	heads   []*memoValue // by position
+	entries blocks[memoValue]
 }
-
-const memoBlockSize = 256
 
 func (t *memoTable) get(pos int, key memoKey) *memoValue {
 	if pos >= len(t.heads) {
@@ -57,12 +52,7 @@ func (t *memoTable) add(pos int, key memoKey) *memoValue {
 		copy(heads, t.heads)
 		t.heads = heads
 	}
-	if t.block == nil || t.used == len(t.block) {
-		t.block = new([memoBlockSize]memoValue)
-		t.used = 0
-	}
-	v := &t.block[t.used]
-	t.used++
+	v := t.entries.new()
 	*v = memoValue{key: key, next: t.heads[pos]}
 	t.heads[pos] = v
 	return v

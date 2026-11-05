@@ -218,10 +218,7 @@ func SimpleTokeniser(tokenDefs []TokenDef) func(string) (*SimpleTokenStream, err
 		mode := initialMode
 		var prevModes []*tokeniserMode
 		var tokens []Token
-		// Tokens are allocated in blocks, not boxed one by one; a block is an
-		// array so that pointers into it stay valid.
-		var block *[tokenBlockSize]SimpleToken
-		var used int
+		var toks blocks[SimpleToken] // not one allocation per token
 		pos := Position{Line: 1, Column: 1}
 		for len(s) > 0 {
 			def, n := mode.match(s)
@@ -230,13 +227,9 @@ func SimpleTokeniser(tokenDefs []TokenDef) func(string) (*SimpleTokenStream, err
 			}
 			tokValue := s[:n]
 			if def.Name != "" {
-				if block == nil || used == len(block) {
-					block = new([tokenBlockSize]SimpleToken)
-					used = 0
-				}
-				block[used] = SimpleToken{TokType: def.Name, TokValue: tokValue, TokPos: pos}
-				tokens = append(tokens, &block[used])
-				used++
+				tok := toks.new()
+				*tok = SimpleToken{TokType: def.Name, TokValue: tokValue, TokPos: pos}
+				tokens = append(tokens, tok)
 			}
 			switch {
 			case def.PushMode != "":
@@ -256,8 +249,6 @@ func SimpleTokeniser(tokenDefs []TokenDef) func(string) (*SimpleTokenStream, err
 		return &SimpleTokenStream{tokens: tokens, eof: eofAt(pos)}, nil
 	}
 }
-
-const tokenBlockSize = 256
 
 type tokeniserMode struct {
 	matchers []tokenMatcher
