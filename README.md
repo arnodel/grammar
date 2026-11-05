@@ -1,5 +1,7 @@
 # grammar
 
+[![CI](https://github.com/arnodel/grammar/actions/workflows/ci.yml/badge.svg)](https://github.com/arnodel/grammar/actions/workflows/ci.yml)
+
 A parser library for Go where the rules are Go structs and the parse tree is
 those same structs, filled in.  There is no separate grammar file or DSL: the
 type you want to get out of the parser *is* the grammar.  Parsing uses
