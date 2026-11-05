@@ -52,6 +52,10 @@ the breaking changes are listed last.
   which halves the parsing time of the json example.
 - A separator that failed to match after the last item of a repeated field
   is now listed among the expected tokens of the error.
+- The memo table is a slice of short lists indexed by stream position, with
+  entries allocated in blocks, instead of a map allocating one entry per
+  memoised parse; together with the previous item this makes the json
+  example parse about seven times faster than before the two changes.
 
 ### Breaking changes
 

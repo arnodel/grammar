@@ -132,7 +132,7 @@ func TestFail(t *testing.T) {
 
 func TestFailureRecord(t *testing.T) {
 	toks, _ := parseTestTokenise(`1 + 2`)
-	s := &ParserState{TokenStream: toks, memo: memoTable{}}
+	s := &ParserState{TokenStream: toks}
 	num := TokenOptions{TokenParseOptions: []TokenParseOptions{{TokenType: "number"}}}
 	op := TokenOptions{TokenParseOptions: []TokenParseOptions{{TokenType: "op"}}}
 	plus := TokenOptions{TokenParseOptions: []TokenParseOptions{{TokenType: "op", TokenValue: "+"}}}
