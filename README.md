@@ -294,6 +294,31 @@ func (w *Word) MemoKey(opts grammar.TokenOptions) any {
 Rules that do not implement it are parsed afresh every time, which is the
 right default for cheap token-like rules.
 
+A rule reports a token mismatch by returning the error from
+`opts.MatchNextToken(s)`, and any other failure with `s.Fail`:
+
+```golang
+func (n *EvenNumber) Parse(r any, s *grammar.ParserState, opts grammar.TokenOptions) *grammar.ParseError {
+    pos := s.Save()
+    tok, err := opts.MatchNextToken(s)
+    if err != nil {
+        return err
+    }
+    if !isEven(tok.Value()) {
+        return s.Fail(pos, tok, errors.New("odd number"))
+    }
+    n.Value = tok.Value()
+    return nil
+}
+```
+
+The parser state keeps a record of the furthest failure so far, with every
+reason given for it, and that is what `grammar.Parse` reports: the furthest
+point reached is where the input went wrong.  Both functions above record
+into it and return a pointer to it, so no error is allocated while parsing,
+and the error a rule gets back from a sub-rule only means "failed"; it does
+not necessarily describe that sub-rule's own failure.
+
 ## Generating a parser
 
 The above works using reflection.  It is also possible to generate, for each

@@ -15,11 +15,12 @@ type memoKey struct {
 }
 
 type memoValue struct {
-	pos      int
-	val      any
-	err      *ParseError
-	rec      bool
-	accessed bool
+	pos      int         // where the parse ended, if ok
+	val      any         // the parsed rule, if ok
+	ok       bool        // val and pos hold a result (maybe a seed being grown)
+	err      *ParseError // the error, if failed
+	rec      bool        // being parsed: a reference to it is left recursive
+	accessed bool        // referenced while being parsed
 }
 
 type memoTable map[memoKey]*memoValue
@@ -28,14 +29,92 @@ type ParserState struct {
 	TokenStream
 	memo     memoTable
 	keyStack []memoKey
-	lastErr  *ParseError
+	fail     ParseError // the furthest failure so far, see recordFailure
 	logger   *log.Logger
 	exhaust  bool
 }
 
-func (s *ParserState) MergeError(err *ParseError) *ParseError {
-	s.lastErr = s.lastErr.Merge(err)
-	return s.lastErr
+// Fail records that parsing failed at stream position pos, on token tok, for
+// the given reason, and returns the error for the Parse method to return.  A
+// custom rule uses it to report a failure other than a token mismatch (which
+// TokenOptions.MatchNextToken records itself):
+//
+//	pos := s.Save()
+//	tok, err := opts.MatchNextToken(s)
+//	if err != nil {
+//		return err
+//	}
+//	if !valid(tok) {
+//		return s.Fail(pos, tok, errors.New("invalid literal"))
+//	}
+//
+// Only the furthest failure of a parse is recorded (with every reason given
+// for it), as it is where the input actually went wrong; earlier ones are
+// dropped.  The *ParseError returned is the same for all failures of a parse
+// and describes the furthest one, so a rule should not expect it to describe
+// its own failure; it only means "failed".
+func (s *ParserState) Fail(pos int, tok Token, err error) *ParseError {
+	return s.recordFailure(pos, tok, nil, err)
+}
+
+// recordFailure merges a failure into s.fail, the furthest failure record,
+// and returns a pointer to the record, which is what every failing rule
+// returns.  This way no error is allocated during parsing; Parse returns a
+// copy of the record at the end.
+func (s *ParserState) recordFailure(pos int, tok Token, opts []TokenParseOptions, err error) *ParseError {
+	f := &s.fail
+	switch {
+	case f.Token == nil || pos > f.Pos:
+		f.Pos = pos
+		f.Token = tok
+		f.TokenParseOptions = append(f.TokenParseOptions[:0], opts...)
+		f.Err = err
+	case pos == f.Pos:
+		for _, o := range opts {
+			if !containsOption(f.TokenParseOptions, o) {
+				f.TokenParseOptions = append(f.TokenParseOptions, o)
+			}
+		}
+		f.Err = mergeErrs(f.Err, err)
+	default:
+		return f // Not as far as the record: dropped.
+	}
+	if f.Err == errRecursion && len(f.TokenParseOptions) > 0 {
+		// The expected tokens are the useful message; the marker is not.
+		f.Err = nil
+	}
+	return f
+}
+
+// beyondRecord reports whether a failure at pos would be dropped by
+// recordFailure, so that callers can skip computing its details.
+func (s *ParserState) beyondRecord(pos int) bool {
+	return s.fail.Token != nil && pos < s.fail.Pos
+}
+
+// fold records an error allocated by a custom rule (recognised by not being
+// the shared record) and returns the shared record.
+func (s *ParserState) fold(err *ParseError) *ParseError {
+	if err == nil || err == &s.fail {
+		return err
+	}
+	return s.recordFailure(err.Pos, err.Token, err.TokenParseOptions, err.Err)
+}
+
+// result returns the error for Parse to return: a copy of the record, so
+// that it does not keep the parser state alive.
+func (s *ParserState) result() *ParseError {
+	result := s.fail
+	return &result
+}
+
+func containsOption(opts []TokenParseOptions, o TokenParseOptions) bool {
+	for _, p := range opts {
+		if p == o {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *ParserState) Debug() bool {
@@ -133,13 +212,18 @@ func Parse(dest any, s TokenStream, opts ...ParseOption) *ParseError {
 		opt(state)
 	}
 	err := ParseWithOptions(dest, state, TokenOptions{})
-	if err != nil {
-		return state.lastErr
+	if err == nil && state.exhaust {
+		err = state.checkExhausted(dest)
 	}
-	if state.exhaust {
-		return state.checkExhausted(dest)
+	if err == nil {
+		return nil
 	}
-	return nil
+	if state.fail.Token == nil {
+		// Cannot happen with the rules in this package: every failure is
+		// recorded.  Be safe with a custom rule returning an unrecorded error.
+		return err
+	}
+	return state.result()
 }
 
 // checkExhausted returns an error unless the next token is EOF.  Tokens the
@@ -157,7 +241,7 @@ func (s *ParserState) checkExhausted(dest any) *ParseError {
 		return nil
 	}
 	s.Restore(pos)
-	return s.lastErr.Merge(&ParseError{Err: ErrNotExhausted, Token: tok, Pos: pos})
+	return s.recordFailure(pos, tok, nil, ErrNotExhausted)
 }
 
 // ParseWithOptions is the same as Parse but the ParseOptions are explicitely
@@ -184,11 +268,14 @@ func ParseWithOptions(dest any, s *ParserState, opts TokenOptions) *ParseError {
 				delete(s.memo, k)
 				i--
 			}
+			if !memoVal.ok {
+				return s.failRecursion(pos)
+			}
 		}
 		if memoVal.err != nil {
 			return memoVal.err
 		}
-		if memoVal.pos > 0 {
+		if memoVal.ok {
 			s.Restore(memoVal.pos)
 			s.Logf("dest: %v, memoVal: %v", dest, *memoVal)
 			reflect.ValueOf(dest).Elem().Set(reflect.ValueOf(memoVal.val).Elem())
@@ -203,15 +290,14 @@ func ParseWithOptions(dest any, s *ParserState, opts TokenOptions) *ParseError {
 		}
 		s.keyStack = append(s.keyStack, key)
 		memoVal := memoValue{
-			err: &ParseError{Err: errRecursion, Token: SimpleToken{}, Pos: pos},
 			val: dest,
-			rec: true,
+			rec: true, // Until done, a reference to this rule is left recursive.
 		}
 		s.memo[key] = &memoVal
-		err := p.Parse(dest, s, opts)
+		err := s.fold(p.Parse(dest, s, opts))
 		s.Logf("XX %T, memoVal: %v", dest, memoVal)
 		if err == nil {
-			memoVal.err = nil
+			memoVal.ok = true
 			memoVal.pos = s.Save()
 			for memoVal.accessed {
 				// Grow the seed: re-parse with the last result as the
@@ -232,7 +318,6 @@ func ParseWithOptions(dest any, s *ParserState, opts TokenOptions) *ParseError {
 			memoVal.val = dest
 		} else {
 			memoVal.err = err
-			s.MergeError(err)
 		}
 		memoVal.rec = false
 		s.keyStack = s.keyStack[:len(s.keyStack)-1]
@@ -245,6 +330,26 @@ func ParseWithOptions(dest any, s *ParserState, opts TokenOptions) *ParseError {
 	}
 }
 
+// failRecursion is the failure of a left-recursive reference to a rule
+// being parsed at pos (see Memoisable); the reference parses as its seed,
+// which is nothing to start with.
+func (s *ParserState) failRecursion(pos int) *ParseError {
+	if s.beyondRecord(pos) {
+		return &s.fail
+	}
+	tok := s.Next()
+	s.Restore(pos)
+	return s.recordFailure(pos, tok, nil, errRecursion)
+}
+
+// A ParseError describes where a parse failed: the position and token, the
+// tokens that were expected there (TokenParseOptions, from "tok" tags) and
+// any other reason (Err).  Parse returns the furthest failure of the parse,
+// which is where the input went wrong.
+//
+// During a parse, the *ParseError returned by a failing rule is shared by all
+// failures and describes the furthest one so far, not necessarily the rule's
+// own failure (see ParserState.Fail).
 type ParseError struct {
 	Err error
 	Token
@@ -312,11 +417,16 @@ func summariseOptions(opts []TokenParseOptions) ([]string, []string) {
 	return types, values
 }
 
+// Merge returns the error describing the furthest of the two failures, or
+// both if they are at the same position.  Errors returned by the rules of
+// this package are all the shared record of the furthest failure (see
+// ParserState.Fail), so merging them is a no-op; a custom rule combining
+// errors it allocated itself may need it.
 func (e *ParseError) Merge(e2 *ParseError) *ParseError {
 	if e == nil {
 		return e2
 	}
-	if e2 == nil {
+	if e2 == nil || e == e2 {
 		return e
 	}
 	if e.Pos > e2.Pos {
@@ -325,18 +435,13 @@ func (e *ParseError) Merge(e2 *ParseError) *ParseError {
 	if e.Pos < e2.Pos {
 		return e2
 	}
-	if e == e2 {
-		return e
-	}
 	// A fresh slice (append could write into e's array, shared with other
 	// errors), each option once (merging errors that already share options
 	// would otherwise multiply them with every level of nesting).
 	opts := make([]TokenParseOptions, 0, len(e.TokenParseOptions)+len(e2.TokenParseOptions))
-	seen := make(map[TokenParseOptions]bool, cap(opts))
 	for _, list := range [][]TokenParseOptions{e.TokenParseOptions, e2.TokenParseOptions} {
 		for _, o := range list {
-			if !seen[o] {
-				seen[o] = true
+			if !containsOption(opts, o) {
 				opts = append(opts, o)
 			}
 		}
@@ -376,9 +481,5 @@ func parseUnmemoized(dest any, s *ParserState, opts TokenOptions) *ParseError {
 	if !ok {
 		panic(fmt.Sprintf("invalid type for rule %#v", dest))
 	}
-	err := p.Parse(dest, s, opts)
-	if err != nil {
-		s.MergeError(err)
-	}
-	return err
+	return s.fold(p.Parse(dest, s, opts))
 }

@@ -29,6 +29,8 @@ the breaking changes are listed last.
 - `TokenDef.Scan`, a hand-written scanner for a token type, on its own or
   guarded by a pattern.
 - `SimpleTokeniser` patterns may contain capturing groups.
+- `ParserState.Fail`, for custom rules to report a failure that is not a
+  token mismatch.
 
 ### Fixed
 
@@ -45,6 +47,11 @@ the breaking changes are listed last.
   token; it is now several times faster and allocates once per regular
   expression match, none for literal and character class patterns.
 - A `SimpleTokeniser` pattern matching the empty string looped forever.
+- Failures are recorded in one furthest-failure record on the parser state
+  instead of allocating and merging a `ParseError` per failed alternative,
+  which halves the parsing time of the json example.
+- A separator that failed to match after the last item of a repeated field
+  is now listed among the expected tokens of the error.
 
 ### Breaking changes
 
@@ -65,4 +72,10 @@ the breaking changes are listed last.
 - `SimpleTokeniser` streams hold `*SimpleToken` values, not `SimpleToken`.
 - `SimpleTokeniser` panics when a definition has neither a pattern nor a
   `Scan`, or pushes an unknown mode.
+- `TokenOptions.MatchNextToken` takes a `*ParserState` rather than a
+  `TokenStream`, as it records the failure.
+- The `*ParseError` returned by a failing rule is shared by all failures of
+  the parse and describes the furthest one, not necessarily the rule's own.
+  `ParserState.MergeError` is gone; `ParseError.Merge` remains for custom
+  rules that allocate their own errors.
 - Requires Go 1.23.

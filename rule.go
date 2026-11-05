@@ -215,13 +215,12 @@ func repeatCore(s *ParserState, opts RepeatOptions, parseItem func() *ParseError
 // anything.
 func emptyMatchError(s *ParserState, ruleName string) *ParseError {
 	pos := s.Save()
+	if s.beyondRecord(pos) {
+		return &s.fail
+	}
 	tok := s.Next()
 	s.Restore(pos)
-	return &ParseError{
-		Token: tok,
-		Err:   fmt.Errorf("empty match for rule %s", ruleName),
-		Pos:   pos,
-	}
+	return s.Fail(pos, tok, fmt.Errorf("empty match for rule %s", ruleName))
 }
 
 type Tok struct {
