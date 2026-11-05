@@ -8,13 +8,15 @@ import (
 	"strings"
 )
 
+// memoKey identifies a memoised rule at a given stream position.
 type memoKey struct {
-	pos      int
 	ruleType reflect.Type
 	extra    any // from Memoisable.MemoKey
 }
 
 type memoValue struct {
+	key      memoKey
+	next     *memoValue  // next entry at the same position
 	pos      int         // where the parse ended, if ok
 	val      any         // the parsed rule, if ok
 	ok       bool        // val and pos hold a result (maybe a seed being grown)
@@ -23,12 +25,61 @@ type memoValue struct {
 	accessed bool        // referenced while being parsed
 }
 
-type memoTable map[memoKey]*memoValue
+// memoTable holds the memo entries by stream position.  Positions are small
+// dense integers and few rules are tried at each, so a slice of short lists
+// beats a map, and entries are allocated in blocks rather than one by one.
+type memoTable struct {
+	heads   []*memoValue // by position
+	entries blocks[memoValue]
+}
+
+func (t *memoTable) get(pos int, key memoKey) *memoValue {
+	if pos >= len(t.heads) {
+		return nil
+	}
+	for v := t.heads[pos]; v != nil; v = v.next {
+		if v.key == key {
+			return v
+		}
+	}
+	return nil
+}
+
+// add inserts a new entry for key at pos and returns it.
+func (t *memoTable) add(pos int, key memoKey) *memoValue {
+	if pos >= len(t.heads) {
+		heads := make([]*memoValue, max(pos+1, 2*len(t.heads), 64))
+		copy(heads, t.heads)
+		t.heads = heads
+	}
+	v := t.entries.new()
+	*v = memoValue{key: key, next: t.heads[pos]}
+	t.heads[pos] = v
+	return v
+}
+
+func (t *memoTable) delete(pos int, key memoKey) {
+	if pos >= len(t.heads) {
+		return
+	}
+	for p := &t.heads[pos]; *p != nil; p = &(*p).next {
+		if (*p).key == key {
+			*p = (*p).next
+			return
+		}
+	}
+}
+
+// stackEntry is a memoised rule being parsed.
+type stackEntry struct {
+	pos int
+	key memoKey
+}
 
 type ParserState struct {
 	TokenStream
 	memo     memoTable
-	keyStack []memoKey
+	keyStack []stackEntry
 	fail     ParseError // the furthest failure so far, see recordFailure
 	logger   *log.Logger
 	exhaust  bool
@@ -204,10 +255,7 @@ var ErrNotExhausted = errors.New("expected end of input")
 // token stream.  Parse can panic if dest is not a valid grammar rule.  It
 // returns a non-nil *ParseError if the token stream does not match the rule.
 func Parse(dest any, s TokenStream, opts ...ParseOption) *ParseError {
-	state := &ParserState{
-		TokenStream: s,
-		memo:        memoTable{},
-	}
+	state := &ParserState{TokenStream: s}
 	for _, opt := range opts {
 		opt(state)
 	}
@@ -252,21 +300,25 @@ func ParseWithOptions(dest any, s *ParserState, opts TokenOptions) *ParseError {
 		return parseUnmemoized(dest, s, opts)
 	}
 	pos := s.Save()
-	key := memoKey{pos: pos, ruleType: reflect.TypeOf(dest), extra: m.MemoKey(opts)}
-	memoVal := s.memo[key]
+	key := memoKey{ruleType: reflect.TypeOf(dest), extra: m.MemoKey(opts)}
+	memoVal := s.memo.get(pos, key)
 	if memoVal != nil {
-		s.Logf("pos: %d, memoVal: %v", pos, *memoVal)
+		if s.Debug() {
+			s.Logf("pos: %d, memoVal: %v", pos, *memoVal)
+		}
 		if memoVal.rec {
 			memoVal.accessed = true
-			i := len(s.keyStack) - 1
-			for {
+			// The rules being parsed above this one depend on its seed, so
+			// their entries must not be reused once the seed has grown.
+			for i := len(s.keyStack) - 1; ; i-- {
 				k := s.keyStack[i]
-				if k == key {
+				if k.pos == pos && k.key == key {
 					break
 				}
-				s.Logf("Delete %d, %v", i, k)
-				delete(s.memo, k)
-				i--
+				if s.Debug() {
+					s.Logf("Delete %d, %v", i, k)
+				}
+				s.memo.delete(k.pos, k.key)
 			}
 			if !memoVal.ok {
 				return s.failRecursion(pos)
@@ -277,7 +329,9 @@ func ParseWithOptions(dest any, s *ParserState, opts TokenOptions) *ParseError {
 		}
 		if memoVal.ok {
 			s.Restore(memoVal.pos)
-			s.Logf("dest: %v, memoVal: %v", dest, *memoVal)
+			if s.Debug() {
+				s.Logf("dest: %v, memoVal: %v", dest, *memoVal)
+			}
 			reflect.ValueOf(dest).Elem().Set(reflect.ValueOf(memoVal.val).Elem())
 			return nil
 		}
@@ -288,14 +342,14 @@ func ParseWithOptions(dest any, s *ParserState, opts TokenOptions) *ParseError {
 		if s.Debug() {
 			s.Logf("===> %T, %v", p, opts)
 		}
-		s.keyStack = append(s.keyStack, key)
-		memoVal := memoValue{
-			val: dest,
-			rec: true, // Until done, a reference to this rule is left recursive.
-		}
-		s.memo[key] = &memoVal
+		s.keyStack = append(s.keyStack, stackEntry{pos: pos, key: key})
+		memoVal := s.memo.add(pos, key)
+		memoVal.val = dest
+		memoVal.rec = true // Until done, a reference to this rule is left recursive.
 		err := s.fold(p.Parse(dest, s, opts))
-		s.Logf("XX %T, memoVal: %v", dest, memoVal)
+		if s.Debug() {
+			s.Logf("XX %T, memoVal: %v", dest, *memoVal)
+		}
 		if err == nil {
 			memoVal.ok = true
 			memoVal.pos = s.Save()
