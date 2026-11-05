@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased (v0.2.0)
+## v0.2.0 - 2026-11-05
 
 This release reworks the parser.  It is not backward compatible with v0.1.0;
 the breaking changes are listed last.
@@ -49,23 +49,30 @@ the breaking changes are listed last.
 - Merging two errors at the same position dropped the error message; both
   the message and the expected tokens are now reported.
 - Errors at end of input reported "Ln 0, Col 0".
-- `SimpleTokeniser` tokenised at about 3 MB/s, with several allocations per
-  token; it is now several times faster and allocates once per regular
-  expression match, none for literal and character class patterns.
-- A `SimpleTokeniser` pattern matching the empty string looped forever.
-- Failures are recorded in one furthest-failure record on the parser state
-  instead of allocating and merging a `ParseError` per failed alternative,
-  which halves the parsing time of the json example.
 - A separator that failed to match after the last item of a repeated field
   is now listed among the expected tokens of the error.
-- The memo table is a slice of short lists indexed by stream position, with
-  entries allocated in blocks, instead of a map allocating one entry per
-  memoised parse; together with the previous item this makes the json
-  example parse about seven times faster than before the two changes.
-- First sets (see above) make the json example parse another third faster.
-- Rule definitions and first sets are built together and published to their
-  caches complete, so parsing with the same or different grammars from
-  several goroutines is safe; the rule definition cache was a plain map.
+- A `SimpleTokeniser` pattern matching the empty string looped forever.
+- A `SimpleTokeniser` pattern containing `\Q` without `\E` broke the
+  tokeniser.
+- Parsing from several goroutines was not safe: the rule definition cache
+  was a plain map.  Rule definitions and first sets are now built together
+  and published to their caches complete.
+
+### Performance
+
+On the json example (116 KB, 2000 objects) tokenising went from 34 ms to
+6 ms and parsing from 81 ms to 8 ms with the generated parser (17 ms with
+reflection), through:
+
+- `SimpleTokeniser` matching each definition separately, with literal and
+  character class patterns matched without a regular expression, and
+  allocating tokens in blocks.
+- Failures recorded in one furthest-failure record on the parser state
+  instead of a `ParseError` allocated and merged per failed alternative.
+- A memo table indexed by stream position, with entries allocated in
+  blocks, instead of a map.
+- First sets, so that alternatives, optional fields and repeated items that
+  cannot start with the next token are not allocated or parsed.
 
 ### Breaking changes
 
@@ -97,3 +104,7 @@ the breaking changes are listed last.
   `ParserState.MergeError` is gone; `ParseError.Merge` remains for custom
   rules that allocate their own errors.
 - Requires Go 1.23.
+
+## v0.1.0 - 2024-11-17
+
+First tagged release.
