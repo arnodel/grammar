@@ -305,6 +305,9 @@ func newTokenMatcher(def TokenDef) (tokenMatcher, error) {
 	if err != nil {
 		return tm, err
 	}
+	// The anchored pattern is built from the parsed tree, not from the text
+	// (where e.g. a \Q would swallow the closing bracket).
+	anchored := `^(?:` + tree.String() + `)`
 	tree = tree.Simplify()
 	tm.first, _ = firstBytes(tree)
 	switch {
@@ -319,10 +322,7 @@ func newTokenMatcher(def TokenDef) (tokenMatcher, error) {
 		tm.class = tm.first
 	default:
 		tm.kind = matchRegexp
-		tm.re, err = regexp.Compile(`^(?:` + def.Ptn + `)`)
-		if err != nil {
-			return tm, err
-		}
+		tm.re = regexp.MustCompile(anchored)
 	}
 	return tm, nil
 }
@@ -380,17 +380,11 @@ func (b *byteSet) union(o byteSet) {
 
 // addRune adds the first byte of the UTF-8 encoding of r.
 func (b *byteSet) addRune(r rune) {
-	if r < utf8.RuneSelf {
-		b.add(byte(r))
-		return
-	}
-	var buf [utf8.UTFMax]byte
-	utf8.EncodeRune(buf[:], r)
-	b.add(buf[0])
+	b.addRange(r, r)
 }
 
-// addRange adds the first bytes of the UTF-8 encodings of the runes in
-// [lo, hi].
+// addRange adds the bytes a rune in [lo, hi] can start with in the input.
+// Note that the regexp engine decodes any invalid byte as utf8.RuneError.
 func (b *byteSet) addRange(lo, hi rune) {
 	for r := lo; r <= hi && r < utf8.RuneSelf; r++ {
 		b.add(byte(r))
@@ -398,10 +392,22 @@ func (b *byteSet) addRange(lo, hi rune) {
 	if hi < utf8.RuneSelf {
 		return
 	}
-	// Lead bytes of multi-byte sequences; over-approximating is fine.
-	for c := 0xC0; c <= 0xF4; c++ {
-		b.add(byte(c))
+	if lo <= utf8.RuneError && utf8.RuneError <= hi {
+		for c := utf8.RuneSelf; c <= 0xFF; c++ {
+			b.add(byte(c))
+		}
+		return
 	}
+	// Lead bytes increase with the rune value.
+	for c := leadByte(max(lo, utf8.RuneSelf)); c <= leadByte(hi); c++ {
+		b.add(c)
+	}
+}
+
+func leadByte(r rune) byte {
+	var buf [utf8.UTFMax]byte
+	utf8.EncodeRune(buf[:], r)
+	return buf[0]
 }
 
 // firstBytes returns the set of bytes a match of re can start with, and

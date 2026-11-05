@@ -1,6 +1,7 @@
 package grammar
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -46,6 +47,17 @@ func TestTokeniserPatternKinds(t *testing.T) {
 		{Name: "str", Scan: scanDoubleQuoted},     // scan only
 	})
 	if got, want := tokenTypesAndValues(t, tokenise, `(1.5 -> ABC) "a\"b" 42`), `bkt:( num:1.5 arrow:-> word:ABC bkt:) str:"a\"b" num:42`; got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestTokeniserQuotedPattern(t *testing.T) {
+	// A \Q without \E used to swallow the closing bracket of the anchor.
+	tokenise := SimpleTokeniser([]TokenDef{
+		{Name: "lit", Ptn: `\Qa.b`},
+		{Name: "other", Ptn: `[a-z.)]+`},
+	})
+	if got, want := tokenTypesAndValues(t, tokenise, `a.bxa.b)`), `lit:a.b other:xa.b)`; got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
 }
@@ -190,6 +202,10 @@ func TestFirstBytes(t *testing.T) {
 		{`.`, "a\xff", "", false},
 		{`\pL`, "a\xc3", "1", false},
 		{`^`, "", "a", true},
+		// Invalid UTF-8 bytes decode to U+FFFD, which these match.
+		{`[^a]`, "b\x80\xff", "a", false},
+		{`\x{FFFD}`, "\x80\xff", "a", false},
+		{`[é-ÿ]`, "\xc3", "\xc2\xc4", false},
 	}
 	for _, tt := range tests {
 		tm, err := newTokenMatcher(TokenDef{Ptn: tt.ptn})
@@ -207,4 +223,44 @@ func TestFirstBytes(t *testing.T) {
 			}
 		}
 	}
+}
+
+// FuzzTokenMatcher checks a token matcher (first-byte filter, then fast path
+// or regexp) against the regexp engine alone.
+func FuzzTokenMatcher(f *testing.F) {
+	for _, ptn := range []string{
+		`\s+`, `[()]`, `->`, `([0-9]+)(\.[0-9]+)?`, `(?i)abc`, `let`, `[a-z]+`,
+		`"[^"]*"`, `-?[0-9]+(?:\.[0-9]+)?`, `true|false`, `[a-zA-Z_][a-zA-Z0-9_-]*`,
+		`\pL+`, `é`, `.`, `x*`, `\bfoo`, `a|bc|(d)`, `^`, `[^a]`, `\x{1F600}`,
+		`(?i)é`, `[a-z]*`, `(?s).+`, `a{2,3}`, `[\x00-\x7f]+`, `ß`, `(?i)ß`, `[[:alpha:]]+`,
+	} {
+		for _, in := range []string{"", "a", "let", "letter", "  x", "1.5", "é", "\xff", "ABC", "aaaa", "\x00"} {
+			f.Add(ptn, in)
+		}
+	}
+	f.Fuzz(func(t *testing.T, ptn, in string) {
+		if in == "" || ptn == "" {
+			return
+		}
+		re, err := regexp.Compile(ptn)
+		if err != nil {
+			return
+		}
+		tm, err := newTokenMatcher(TokenDef{Ptn: ptn})
+		if err != nil {
+			t.Fatalf("regexp compiles but matcher does not: %s", err)
+		}
+		// The leftmost match starting at 0, if any, is the anchored match.
+		want := 0
+		if loc := re.FindStringIndex(in); loc != nil && loc[0] == 0 {
+			want = loc[1]
+		}
+		got := 0
+		if tm.first.has(in[0]) {
+			got = tm.match(in)
+		}
+		if got != want {
+			t.Errorf("pattern %q, input %q: got %d, want %d (kind %d, first has %v)", ptn, in, got, want, tm.kind, tm.first.has(in[0]))
+		}
+	})
 }
