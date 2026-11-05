@@ -251,6 +251,12 @@ Results are memoised by rule type and position, so parsing is linear in the
 size of the input for grammars whose alternatives share prefixes, and the same
 sub-rule is never parsed twice at the same place.
 
+A `OneOf` does not try an alternative that cannot start with the next token,
+nor does a `Seq` try an optional field or a repeated item that cannot: the
+tokens a rule can start with (its first set) are computed from the struct
+tags.  This changes nothing to what is parsed or to error messages, it only
+saves work.
+
 ### Left recursion
 
 Thanks to memoisation, rules may be left recursive, which is the natural way
@@ -296,15 +302,9 @@ func (w *Word) MemoKey(opts grammar.TokenOptions) any {
 Rules that do not implement it are parsed afresh every time, which is the
 right default for cheap token-like rules.
 
-A `OneOf` does not try an alternative that cannot start with the next token,
-nor does a `Seq` try an optional field or a repeated item that cannot: the
-tokens a rule can start with (its first set) are computed from the struct
-tags.  A custom rule's first set is unknown, so it is always tried; it is
-worth putting a `Match` on a keyword or other token before a custom rule in
-a `Seq` so that the sequence as a whole can be skipped.
-
 A rule reports a token mismatch by returning the error from
-`opts.MatchNextToken(s)`, and any other failure with `s.Fail`:
+`opts.MatchNextToken(s)`, and any other failure with `s.Fail`; `s.Peek()`
+returns the next token without consuming it:
 
 ```golang
 func (n *EvenNumber) Parse(r any, s *grammar.ParserState, opts grammar.TokenOptions) *grammar.ParseError {
@@ -328,14 +328,18 @@ into it and return a pointer to it, so no error is allocated while parsing,
 and the error a rule gets back from a sub-rule only means "failed"; it does
 not necessarily describe that sub-rule's own failure.
 
+The first set of a custom rule is unknown, so it is always tried (see
+[Semantics](#semantics)).  Putting a `Match` on a keyword or other token
+before a custom rule in a `Seq` lets the sequence as a whole be skipped.
+
 ## Generating a parser
 
 The above works using reflection.  It is also possible to generate, for each
 rule type, a `Parse` method that does the same thing without reflection.
 The generated methods call back into the grammar package for the logic of
 repeated fields, errors and tags, so they behave exactly like the reflection
-based ones; they are just a little faster (around 10-15% on the JSON example)
-and allocate less.
+based ones; they are about twice as fast on the JSON example and allocate
+half as much.
 
 Add this line to the file containing the grammar you want to compile:
 
