@@ -126,7 +126,7 @@ func firstOfType(t reflect.Type) FirstSet {
 	if f, ok := firstSets.load(t); ok {
 		return f
 	}
-	computeFirstSets(t)
+	newRuleBuilder().build(t)
 	f, _ := firstSets.load(t)
 	return f
 }
@@ -170,12 +170,38 @@ func alternativeTypesOf(t reflect.Type) ([]reflect.Type, bool) {
 	return reflect.New(t).Interface().(alternatives).alternativeTypes(), true
 }
 
+// A ruleBuilder builds the rule definitions and first sets of all the types
+// reachable from a root type that are not cached yet, and publishes them
+// together.  Until then they live in the builder, so a definition is never
+// visible to other goroutines before it is complete.
+type ruleBuilder struct {
+	defs   map[reflect.Type]ruleDefOrError
+	firsts map[reflect.Type]FirstSet
+}
+
+func newRuleBuilder() *ruleBuilder {
+	return &ruleBuilder{defs: map[reflect.Type]ruleDefOrError{}, firsts: map[reflect.Type]FirstSet{}}
+}
+
+// def returns the definition of t, from the cache or built here.
+func (b *ruleBuilder) def(t reflect.Type) (*RuleDef, error) {
+	if d, ok := ruleDefs.load(t); ok {
+		return d.ruleDef, d.err
+	}
+	d, ok := b.defs[t]
+	if !ok {
+		d.ruleDef, d.err = calcRuleDef(t)
+		b.defs[t] = d
+	}
+	return d.ruleDef, d.err
+}
+
 // children returns the rule types the first set of t depends on.
-func children(t reflect.Type) []reflect.Type {
+func (b *ruleBuilder) children(t reflect.Type) []reflect.Type {
 	if alts, ok := alternativeTypesOf(t); ok {
 		return alts
 	}
-	def, err := getRuleDefBare(t)
+	def, err := b.def(t)
 	if err != nil {
 		return nil
 	}
@@ -187,7 +213,7 @@ func children(t reflect.Type) []reflect.Type {
 }
 
 // computeFirst computes the first set of t from those of its children.
-func computeFirst(t reflect.Type, firstOf func(reflect.Type) FirstSet) FirstSet {
+func (b *ruleBuilder) computeFirst(t reflect.Type, firstOf func(reflect.Type) FirstSet) FirstSet {
 	switch t {
 	case simpleTokenType, matchType, tokType, emptyType:
 		return nullableFirst // with no options to match, these consume nothing
@@ -199,7 +225,7 @@ func computeFirst(t reflect.Type, firstOf func(reflect.Type) FirstSet) FirstSet 
 		}
 		return res
 	}
-	def, err := getRuleDefBare(t)
+	def, err := b.def(t)
 	if err != nil {
 		return anyFirst // a custom rule
 	}
@@ -226,11 +252,12 @@ func computeFirst(t reflect.Type, firstOf func(reflect.Type) FirstSet) FirstSet 
 	return res
 }
 
-// computeFirstSets computes and caches the first sets of root and of all the
-// rule types reachable from it that are not yet known, as the least fixpoint
-// of computeFirst over them (so recursion, left or not, is fine), then fills
-// in the first sets of the fields of their rule definitions.
-func computeFirstSets(root reflect.Type) {
+// build builds the definitions and first sets of root and of all the rule
+// types reachable from it that are not cached yet.  The first sets are the
+// least fixpoint of computeFirst over those types (so recursion, left or
+// not, is fine); they then fill in the field first sets of the definitions,
+// and everything is published.
+func (b *ruleBuilder) build(root reflect.Type) {
 	env := map[reflect.Type]FirstSet{}
 	var unknown []reflect.Type
 	var visit func(t reflect.Type)
@@ -244,7 +271,7 @@ func computeFirstSets(root reflect.Type) {
 		}
 		env[t] = FirstSet{}
 		unknown = append(unknown, t)
-		for _, c := range children(t) {
+		for _, c := range b.children(t) {
 			visit(c)
 		}
 	}
@@ -253,7 +280,7 @@ func computeFirstSets(root reflect.Type) {
 	for changed := true; changed; {
 		changed = false
 		for _, t := range unknown {
-			f := computeFirst(t, lookup)
+			f := b.computeFirst(t, lookup)
 			if !f.sameSize(env[t]) {
 				env[t] = f
 				changed = true
@@ -266,16 +293,21 @@ func computeFirstSets(root reflect.Type) {
 			f = anyFirst // cannot match anything, or only through itself
 		}
 		env[t] = f
+		b.firsts[t] = f
 	}
-	for _, t := range unknown {
-		if def, err := getRuleDefBare(t); err == nil {
-			def.firsts = make([]FirstSet, len(def.Fields))
-			for i, f := range def.Fields {
-				def.firsts[i] = firstOfField(f.BaseType, f.TokenOptions, lookup)
-			}
+	for _, d := range b.defs {
+		if d.err != nil {
+			continue
 		}
-		firstSets.store(t, env[t])
+		d.ruleDef.firsts = make([]FirstSet, len(d.ruleDef.Fields))
+		for i, f := range d.ruleDef.Fields {
+			d.ruleDef.firsts[i] = firstOfField(f.BaseType, f.TokenOptions, lookup)
+		}
 	}
+	// First sets before definitions: a definition found in the cache has its
+	// type's first set there too.
+	firstSets.storeAll(b.firsts)
+	ruleDefs.storeAll(b.defs)
 }
 
 // atomicMap is a map that is safe for concurrent use and as cheap to read as
@@ -297,18 +329,29 @@ func (a *atomicMap[K, V]) load(k K) (V, bool) {
 }
 
 func (a *atomicMap[K, V]) store(k K, v V) {
+	a.storeAll(map[K]V{k: v})
+}
+
+// storeAll adds the entries of kvs, in one copy of the map.  An entry already
+// present is kept, so that concurrent builders of the same (immutable) values
+// agree on which one is published.
+func (a *atomicMap[K, V]) storeAll(kvs map[K]V) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	old := a.m.Load()
 	var m map[K]V
 	if old == nil {
-		m = make(map[K]V, 1)
+		m = make(map[K]V, len(kvs))
 	} else {
-		m = make(map[K]V, len(*old)+1)
+		m = make(map[K]V, len(*old)+len(kvs))
 		for k, v := range *old {
 			m[k] = v
 		}
 	}
-	m[k] = v
+	for k, v := range kvs {
+		if _, present := m[k]; !present {
+			m[k] = v
+		}
+	}
 	a.m.Store(&m)
 }

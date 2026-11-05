@@ -191,37 +191,28 @@ func getRuleDefAndValue(r any) (*RuleDef, reflect.Value) {
 	return ruleDef, elem
 }
 
-// getRuleDef returns the rule definition of tp, with the first sets of its
-// fields.
+// getRuleDef returns the rule definition of tp (or the error if it is not a
+// valid rule type), with the first sets of its fields.
+//
+// Definitions are built for all the types reachable from tp at once, as
+// first sets depend on each other, and published to the cache complete, so
+// that they are immutable from then on and safe to use concurrently.
 func getRuleDef(tp reflect.Type) (*RuleDef, error) {
-	ruleDef, err := getRuleDefBare(tp)
-	if err == nil && ruleDef.firsts == nil {
-		computeFirstSets(tp)
+	cached, ok := ruleDefs.load(tp)
+	if !ok {
+		newRuleBuilder().build(tp)
+		cached, _ = ruleDefs.load(tp)
 	}
-	return ruleDef, err
+	return cached.ruleDef, cached.err
 }
 
-// getRuleDefBare returns the rule definition of tp, maybe without the first
-// sets of its fields (which computeFirstSets fills in).
-func getRuleDefBare(tp reflect.Type) (*RuleDef, error) {
-	cached, ok := ruleDefCache[tp]
-	if ok {
-		return cached.ruleDef, cached.err
-	}
-	ruleDef, err := calcRuleDef(tp)
-	ruleDefCache[tp] = ruleDefCacheValue{
-		ruleDef: ruleDef,
-		err:     err,
-	}
-	return ruleDef, err
-}
-
-type ruleDefCacheValue struct {
+type ruleDefOrError struct {
 	ruleDef *RuleDef
 	err     error
 }
 
-var ruleDefCache = map[reflect.Type]ruleDefCacheValue{}
+// ruleDefs caches the rule definitions by type, complete with first sets.
+var ruleDefs atomicMap[reflect.Type, ruleDefOrError]
 
 func calcRuleDef(tp reflect.Type) (*RuleDef, error) {
 	if tp.Kind() != reflect.Struct {

@@ -63,6 +63,9 @@ the breaking changes are listed last.
   memoised parse; together with the previous item this makes the json
   example parse about seven times faster than before the two changes.
 - First sets (see above) make the json example parse another third faster.
+- Rule definitions and first sets are built together and published to their
+  caches complete, so parsing with the same or different grammars from
+  several goroutines is safe; the rule definition cache was a plain map.
 
 ### Breaking changes
 
