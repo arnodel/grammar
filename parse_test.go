@@ -154,23 +154,33 @@ func TestFailureRecord(t *testing.T) {
 		t.Errorf("record: %+v", *err1)
 	}
 	// A further failure replaces the record; one at the same position adds
-	// its alternatives, once.
+	// its alternatives (as they come: duplicates are removed in the result).
 	s.Restore(2)
 	op.MatchNextToken(s)
 	s.Restore(2)
 	op.MatchNextToken(s)
 	s.Restore(2)
 	plus.MatchNextToken(s)
-	if err1.Pos != 2 || len(err1.TokenParseOptions) != 2 {
+	if err1.Pos != 2 || len(err1.TokenParseOptions) != 3 {
 		t.Errorf("record: %+v", *err1)
 	}
 	// An error allocated by a custom rule is folded into the record.
 	custom := &ParseError{Err: errors.New("custom"), Token: SimpleToken{}, Pos: 2}
-	if folded := s.fold(custom); folded != err1 || err1.Err != custom.Err || len(err1.TokenParseOptions) != 2 {
+	if folded := s.fold(custom); folded != err1 || err1.Err != custom.Err || len(err1.TokenParseOptions) != 3 {
 		t.Errorf("fold: %+v", *err1)
 	}
-	// The result is a copy.
-	if res := s.result(); res == err1 || res.Pos != 2 || res.Err != custom.Err {
+	// The result is a copy, with each option once.
+	res := s.result()
+	if res == err1 || res.Pos != 2 || res.Err != custom.Err || len(res.TokenParseOptions) != 2 || len(err1.TokenParseOptions) != 3 {
 		t.Errorf("result: %+v", *res)
+	}
+	// Past maxRecordedOptions entries the record is compacted in place, so
+	// it stays bounded however many failures there are at a position.
+	for i := 0; i < 10*maxRecordedOptions; i++ {
+		s.Restore(2)
+		op.MatchNextToken(s)
+	}
+	if n := len(err1.TokenParseOptions); n > maxRecordedOptions || n < 2 {
+		t.Errorf("compacted record has %d options: %+v", n, *err1)
 	}
 }

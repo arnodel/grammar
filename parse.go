@@ -121,10 +121,12 @@ func (s *ParserState) recordFailure(pos int, tok Token, opts []TokenParseOptions
 		f.TokenParseOptions = append(f.TokenParseOptions[:0], opts...)
 		f.Err = err
 	case pos == f.Pos:
-		for _, o := range opts {
-			if !containsOption(f.TokenParseOptions, o) {
-				f.TokenParseOptions = append(f.TokenParseOptions, o)
-			}
+		// Duplicates are removed when the result is read, not here: dozens
+		// of options may be recorded at a position, and checking each new
+		// one against them was the biggest cost of a failed match.
+		f.TokenParseOptions = append(f.TokenParseOptions, opts...)
+		if len(f.TokenParseOptions) > maxRecordedOptions {
+			f.TokenParseOptions = uniqueOptions(f.TokenParseOptions, f.TokenParseOptions[:0])
 		}
 		f.Err = mergeErrs(f.Err, err)
 	default:
@@ -156,7 +158,25 @@ func (s *ParserState) fold(err *ParseError) *ParseError {
 // that it does not keep the parser state alive.
 func (s *ParserState) result() *ParseError {
 	result := s.fail
+	if len(result.TokenParseOptions) > 0 {
+		result.TokenParseOptions = uniqueOptions(result.TokenParseOptions, nil)
+	}
 	return &result
+}
+
+// maxRecordedOptions is the number of options recorded at the furthest
+// position beyond which they are deduplicated, bounding the record.
+const maxRecordedOptions = 128
+
+// uniqueOptions appends the options to dst without duplicates, in order.
+// dst may be opts[:0] to compact in place.
+func uniqueOptions(opts, dst []TokenParseOptions) []TokenParseOptions {
+	for i, o := range opts {
+		if !containsOption(opts[:i], o) {
+			dst = append(dst, o)
+		}
+	}
+	return dst
 }
 
 func containsOption(opts []TokenParseOptions, o TokenParseOptions) bool {
