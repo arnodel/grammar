@@ -459,24 +459,28 @@ func (e *ParseError) Error() string {
 	return fmt.Sprintf("%s: %s with value %q: %s", e.Token.Position(), e.Token.Type(), e.Token.Value(), hint)
 }
 
-func summariseOptions(opts []TokenParseOptions) ([]string, []string) {
-	seenTypes := map[string]struct{}{}
-	seenValues := map[string]struct{}{}
+// summariseOptions returns the token types and the token values of the
+// options, without duplicates and in the order they were given, which is
+// the order the grammar tried them in.
+func summariseOptions(opts []TokenParseOptions) (types, values []string) {
 	for _, opt := range opts {
-		if opt.TokenValue != "" {
-			seenValues[opt.TokenValue] = struct{}{}
-		} else if opt.TokenType != "" {
-			seenTypes[opt.TokenType] = struct{}{}
+		switch {
+		case opt.TokenValue != "":
+			values = appendUnique(values, opt.TokenValue)
+		case opt.TokenType != "":
+			types = appendUnique(types, opt.TokenType)
 		}
 	}
-	var types, values []string
-	for t := range seenTypes {
-		types = append(types, t)
-	}
-	for v := range seenValues {
-		values = append(values, v)
-	}
 	return types, values
+}
+
+func appendUnique(ss []string, s string) []string {
+	for _, x := range ss {
+		if x == s {
+			return ss
+		}
+	}
+	return append(ss, s)
 }
 
 // Merge returns the error describing the furthest of the two failures, or
