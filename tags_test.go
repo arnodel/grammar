@@ -1,6 +1,7 @@
 package grammar
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -228,6 +229,27 @@ type ttErrSeq struct {
 type ttErrItems struct {
 	Seq
 	Items []ttNum `sep:"op,,"`
+}
+
+type ttErrDup struct {
+	OneOf
+	Word *Tok `tok:"word"`
+	Any  *Tok `tok:"word|number"`
+	Num  *ttNum
+}
+
+// The options recorded at the furthest position are reported once each.
+func TestErrorOptionsUnique(t *testing.T) {
+	toks, _ := tagTestTokenise(`,`)
+	var r ttErrDup
+	err := Parse(&r, toks)
+	if err == nil {
+		t.Fatal("expected an error")
+	}
+	want := []TokenParseOptions{{TokenType: "word"}, {TokenType: "number"}}
+	if !reflect.DeepEqual(err.TokenParseOptions, want) {
+		t.Errorf("got options %v, want %v", err.TokenParseOptions, want)
+	}
 }
 
 func TestErrorMessages(t *testing.T) {
