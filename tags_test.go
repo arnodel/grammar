@@ -252,6 +252,15 @@ func TestErrorOptionsUnique(t *testing.T) {
 	}
 }
 
+type ttErrOneOf struct {
+	OneOf
+	Word  *Tok `tok:"word"`
+	Num   *ttNum
+	Open  *Tok `tok:"op,("`
+	Close *Tok `tok:"op,)"`
+	Any   *Tok `tok:"word|op,("` // repeats, not listed twice
+}
+
 func TestErrorMessages(t *testing.T) {
 	tests := []struct {
 		rule func() any
@@ -265,6 +274,8 @@ func TestErrorMessages(t *testing.T) {
 		// A separator that failed to match is an alternative too, even though
 		// the rule succeeded without it.
 		{func() any { return &ttErrItems{} }, `1 2`, `Ln 1, Col 3: number with value "2": expected token with value ","; expected end of input`},
+		// Several types and values are listed in grammar order, once each.
+		{func() any { return &ttErrOneOf{} }, `,`, `Ln 1, Col 1: op with value ",": expected token with type word or number, or value "(" or ")"`},
 	}
 	for _, tt := range tests {
 		toks, _ := SimpleTokeniser([]TokenDef{

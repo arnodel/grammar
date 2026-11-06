@@ -356,9 +356,11 @@ import {{ .GrammarPkg }} "` + grammarImportPath + `"
 {{- $r := . }}
 
 {{ if eq .Kind 2 -}}
+var _{{ .Name }}_tok = {{ $g }}.TokenOptionsFromTag({{ quote (index .Fields 0).Tok }})
+
 // Parse implements {{ $g }}.Parser for {{ .Name }} without reflection.
 func (r *{{ .Name }}) Parse(_ any, s *{{ $g }}.ParserState, _ {{ $g }}.TokenOptions) *{{ $g }}.ParseError {
-	return r.Tok.Parse(&r.Tok, s, {{ $g }}.TokenOptionsFromTag({{ quote (index .Fields 0).Tok }}))
+	return r.Tok.Parse(&r.Tok, s, _{{ .Name }}_tok)
 }
 {{- else }}
 {{- if .HasVars }}

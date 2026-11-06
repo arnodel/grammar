@@ -6,9 +6,11 @@ package sjson
 
 import grammar "github.com/arnodel/grammar"
 
+var _Boolean_tok = grammar.TokenOptionsFromTag("bool")
+
 // Parse implements grammar.Parser for Boolean without reflection.
 func (r *Boolean) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) *grammar.ParseError {
-	return r.Tok.Parse(&r.Tok, s, grammar.TokenOptionsFromTag("bool"))
+	return r.Tok.Parse(&r.Tok, s, _Boolean_tok)
 }
 
 var (
@@ -54,9 +56,11 @@ func (r *List) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err
 	return nil
 }
 
+var _Number_tok = grammar.TokenOptionsFromTag("number")
+
 // Parse implements grammar.Parser for Number without reflection.
 func (r *Number) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) *grammar.ParseError {
-	return r.Tok.Parse(&r.Tok, s, grammar.TokenOptionsFromTag("number"))
+	return r.Tok.Parse(&r.Tok, s, _Number_tok)
 }
 
 var (
@@ -141,7 +145,9 @@ func (r *Pair) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err
 	return nil
 }
 
+var _String_tok = grammar.TokenOptionsFromTag("string")
+
 // Parse implements grammar.Parser for String without reflection.
 func (r *String) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) *grammar.ParseError {
-	return r.Tok.Parse(&r.Tok, s, grammar.TokenOptionsFromTag("string"))
+	return r.Tok.Parse(&r.Tok, s, _String_tok)
 }
