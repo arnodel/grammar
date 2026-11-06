@@ -31,9 +31,11 @@ func (r *Expr) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err
 	return err
 }
 
+var _Num_tok = grammar.TokenOptionsFromTag("number")
+
 // Parse implements grammar.Parser for Num without reflection.
 func (r *Num) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) *grammar.ParseError {
-	return r.Tok.Parse(&r.Tok, s, grammar.TokenOptionsFromTag("number"))
+	return r.Tok.Parse(&r.Tok, s, _Num_tok)
 }
 
 var (
