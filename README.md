@@ -13,9 +13,12 @@ The parser is a memoising ("packrat") recursive descent parser with
 ordered choice, greedy repetition, and left recursion supported.
 
 The concepts are introduced in the example below.  There are more examples in
-[examples/](./examples/): [json](./examples/json/) is the most complete,
-[sjson](./examples/sjson/) shows the generic one-of types and
-[expr](./examples/expr/) shows a left-recursive expression grammar.
+[examples/](./examples/): [json](./examples/json/) is a good first one,
+[sjson](./examples/sjson/) shows the generic one-of types,
+[expr](./examples/expr/) shows a left-recursive expression grammar and
+[sql](./examples/sql/) is a parser for a SQLite-like dialect of SQL, large
+enough to show how the pieces fit together on a real language and how to
+deal with a language that has several dialects.
 
 ## Rules
 
