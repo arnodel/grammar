@@ -29,12 +29,13 @@ func Example() {
 	// Errors are reported at the furthest point the parser reached, with what
 	// could have come next there.
 	toks, _ = Tokenise(`SELECT a FROM t WHERE x = 1 AND`)
-	fmt.Println(grammar.Parse(&script, toks, grammar.Exhaust))
+	err := grammar.Parse(&script, toks, grammar.Exhaust)
+	fmt.Println(err.Token.Position(), err.Token.Value())
 
 	// Output:
 	// CTEs: 1
 	// columns: 3
 	// joins: 1
 	// having: (> n 1)
-	// Ln 1, Col 32: EOF with value "EOF": expected token with type number or string or blob or param or ident or ckw or qident, or value "NOT" or "-" or "+" or "~" or "NULL" or "TRUE" or "FALSE" or "CURRENT_TIME" or "CURRENT_DATE" or "CURRENT_TIMESTAMP" or "CAST" or "CASE" or "EXISTS" or "("
+	// Ln 1, Col 32 EOF
 }

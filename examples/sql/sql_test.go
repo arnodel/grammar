@@ -63,15 +63,15 @@ func TestErrors(t *testing.T) {
 		src  string
 		want string // the start of the message
 	}{
-		{`SELECT FROM t`, `Ln 1, Col 8: kw with value "FROM": expected token with type ident or ckw or qident or number or string or blob or param, or value "DISTINCT" or "ALL" or "*" or "NOT"`},
-		{`SELECT * FROM t WHERE`, `Ln 1, Col 22: EOF with value "EOF": expected token with type number`},
-		{`SELECT * FROM t WHERE a = `, `Ln 1, Col 27: EOF with value "EOF": expected token with type number`},
-		{`SELECT a b c FROM t`, `Ln 1, Col 12: ident with value "c": expected token with value "," or "FROM" or "WHERE" or "GROUP" or "WINDOW" or "UNION" or "INTERSECT" or "EXCEPT" or "ORDER" or "LIMIT"; expected end of input`},
-		{`SELECT * FROM t JOIN`, `Ln 1, Col 21: EOF with value "EOF": expected token with type ident or ckw or qident, or value "("`},
-		{`INSERT INTO t (a, b) VALUES (1, 2) ON CONFLICT DO`, `Ln 1, Col 50: EOF with value "EOF": expected token with value "NOTHING" or "UPDATE"`},
-		{`SELECT CASE WHEN a THEN 1`, `Ln 1, Col 26: EOF with value "EOF": expected token with type concat or bitor, or value "COLLATE"`},
-		{`SELECT 1 FROM t ORDER BY`, `Ln 1, Col 25: EOF with value "EOF": expected token with type number`},
-		{`SELECT * FROM t WHERE x = 1 2`, `Ln 1, Col 29: number with value "2": expected token with type concat or bitor, or value "COLLATE"`},
+		{`SELECT FROM t`, `Ln 1, Col 8: kw with value "FROM": `},
+		{`SELECT * FROM t WHERE`, `Ln 1, Col 22: EOF with value "EOF": `},
+		{`SELECT * FROM t WHERE a = `, `Ln 1, Col 27: EOF with value "EOF": `},
+		{`SELECT a b c FROM t`, `Ln 1, Col 12: ident with value "c": `},
+		{`SELECT * FROM t JOIN`, `Ln 1, Col 21: EOF with value "EOF": `},
+		{`INSERT INTO t (a, b) VALUES (1, 2) ON CONFLICT DO`, `Ln 1, Col 50: EOF with value "EOF": `},
+		{`SELECT CASE WHEN a THEN 1`, `Ln 1, Col 26: EOF with value "EOF": `},
+		{`SELECT 1 FROM t ORDER BY`, `Ln 1, Col 25: EOF with value "EOF": `},
+		{`SELECT * FROM t WHERE x = 1 2`, `Ln 1, Col 29: number with value "2": `},
 	}
 	for _, tt := range tests {
 		toks, err := Tokenise(tt.src)

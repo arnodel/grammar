@@ -1,6 +1,7 @@
 package sql
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -62,36 +63,125 @@ func TestExprPrecedence(t *testing.T) {
 	}
 }
 
-// lisp writes an expression tree as an S-expression.  Binary levels are
+// lisp writes an expression tree as an S-expression.  Flat lists are
 // folded from the left, as SQL operators are left associative.
 func lisp(e *Expr) string {
-	parts := []string{lispAnd(e.First)}
-	for _, t := range e.Rest {
-		parts = append(parts, lispAnd(t.Expr))
+	switch v := e.Value.(type) {
+	case *Logical:
+		return lispLogical(v)
+	case *Comparison:
+		return lispComparison(v)
+	case *Bitwise:
+		return lispBitwise(v)
+	case *Arithmetic:
+		return lispArithmetic(v)
+	case *Concatenation:
+		return lispTerms(lisp(&v.First), v.Rest, func(t ConcatenationTerm) (string, *Expr) { return t.Op.TokValue, &t.X })
+	case *Collate:
+		return "(COLLATE " + lisp(&v.Lhs) + " " + v.Name.TokValue + ")"
+	case *Atom:
+		return lispAtom(*v)
 	}
-	return nary("OR", parts)
+	panic(fmt.Sprintf("unexpected expression %T", e.Value))
 }
 
-func nary(op string, parts []string) string {
-	if len(parts) == 1 {
-		return parts[0]
+func lispLogical(l *Logical) string {
+	switch v := l.Value.(type) {
+	case *Or:
+		return nary("OR", v.First, orOperands(v.Rest))
+	case *And:
+		return nary("AND", v.First, andOperands(v.Rest))
+	case *Not:
+		return "(NOT " + lisp(&v.X) + ")"
+	}
+	panic(fmt.Sprintf("unexpected logical operator %T", l.Value))
+}
+
+func lispComparison(c *Comparison) string {
+	switch v := c.Value.(type) {
+	case *Equality:
+		return "(" + v.Op.TokValue + " " + lisp(&v.Lhs) + " " + lisp(&v.Rhs) + ")"
+	case *Ordering:
+		return "(" + v.Op.TokValue + " " + lisp(&v.Lhs) + " " + lisp(&v.Rhs) + ")"
+	case *Is:
+		op := "IS " + not(v.Not)
+		if v.Distinct != nil {
+			op += "DISTINCT FROM "
+		}
+		return "(" + op + lisp(&v.Lhs) + " " + lisp(&v.Rhs) + ")"
+	case *NullTest:
+		return "(" + v.Op.TokValue + " " + lisp(&v.Lhs) + ")"
+	case *NotNull:
+		return "(NOTNULL " + lisp(&v.Lhs) + ")"
+	case *Between:
+		return "(" + not(v.Not) + "BETWEEN " + lisp(&v.Lhs) + " " + lisp(&v.Low) + " " + lisp(&v.High) + ")"
+	case *In:
+		var target string
+		switch {
+		case v.Target.Subquery != nil:
+			target = "(SELECT)"
+		case v.Target.List != nil:
+			var items []string
+			for _, item := range v.Target.List.Exprs {
+				items = append(items, lisp(&item))
+			}
+			target = "(" + strings.Join(items, " ") + ")"
+		default:
+			target = lispNames(v.Target.Table.Parts)
+		}
+		return "(" + not(v.Not) + "IN " + lisp(&v.Lhs) + " " + target + ")"
+	case *PatternMatch:
+		s := "(" + not(v.Not) + v.Op.TokValue + " " + lisp(&v.Lhs) + " " + lisp(&v.Pattern)
+		if v.Escape != nil {
+			s += " ESCAPE " + lisp(&v.Escape.X)
+		}
+		return s + ")"
+	}
+	panic(fmt.Sprintf("unexpected comparison %T", c.Value))
+}
+
+func lispBitwise(b *Bitwise) string {
+	switch v := b.Value.(type) {
+	case *BitwiseBinary:
+		return lispTerms(lisp(&v.First), v.Rest, func(t BitwiseTerm) (string, *Expr) { return t.Op.TokValue, &t.X })
+	case *BitwiseComplement:
+		return "(~ " + lisp(&v.X) + ")"
+	}
+	panic(fmt.Sprintf("unexpected bitwise operator %T", b.Value))
+}
+
+func lispArithmetic(a *Arithmetic) string {
+	switch v := a.Value.(type) {
+	case *Additive:
+		return lispTerms(lisp(&v.First), v.Rest, func(t AdditiveTerm) (string, *Expr) { return t.Op.TokValue, &t.X })
+	case *Multiplicative:
+		return lispTerms(lisp(&v.First), v.Rest, func(t MultiplicativeTerm) (string, *Expr) { return t.Op.TokValue, &t.X })
+	case *Sign:
+		return "(" + v.Op.TokValue + " " + lisp(&v.X) + ")"
+	}
+	panic(fmt.Sprintf("unexpected arithmetic %T", a.Value))
+}
+
+func nary(op string, first Expr, rest []Expr) string {
+	parts := []string{lisp(&first)}
+	for i := range rest {
+		parts = append(parts, lisp(&rest[i]))
 	}
 	return "(" + op + " " + strings.Join(parts, " ") + ")"
 }
 
-func lispAnd(e AndExpr) string {
-	parts := []string{lispNot(e.First)}
-	for _, t := range e.Rest {
-		parts = append(parts, lispNot(t.Expr))
+func orOperands(terms []OrTerm) (xs []Expr) {
+	for _, t := range terms {
+		xs = append(xs, t.X)
 	}
-	return nary("AND", parts)
+	return xs
 }
 
-func lispNot(e NotExpr) string {
-	if e.Not != nil {
-		return "(NOT " + lispNot(e.Not.Expr) + ")"
+func andOperands(terms []AndTerm) (xs []Expr) {
+	for _, t := range terms {
+		xs = append(xs, t.X)
 	}
-	return lispCmp(*e.Cmp)
+	return xs
 }
 
 func not(tok *Token) string {
@@ -101,110 +191,22 @@ func not(tok *Token) string {
 	return ""
 }
 
-func lispCmp(e CmpExpr) string {
-	s := lispRel(e.First)
-	for _, tail := range e.Rest {
-		switch {
-		case tail.Cmp != nil:
-			s = "(" + tail.Cmp.Op.TokValue + " " + s + " " + lispRel(tail.Cmp.Expr) + ")"
-		case tail.Is != nil:
-			op := "IS " + not(tail.Is.Not)
-			if tail.Is.Distinct != nil {
-				op += "DISTINCT FROM "
-			}
-			s = "(" + op + s + " " + lispRel(tail.Is.Expr) + ")"
-		case tail.Null != nil:
-			s = "(" + tail.Null.TokValue + " " + s + ")"
-		case tail.NotNull != nil:
-			s = "(NOTNULL " + s + ")"
-		case tail.Between != nil:
-			b := tail.Between
-			s = "(" + not(b.Not) + "BETWEEN " + s + " " + lispRel(b.Low) + " " + lispRel(b.High) + ")"
-		case tail.In != nil:
-			in := tail.In
-			var target string
-			switch {
-			case in.Target.Subquery != nil:
-				target = "(SELECT)"
-			case in.Target.List != nil:
-				var items []string
-				for _, item := range in.Target.List.Exprs {
-					items = append(items, lisp(&item))
-				}
-				target = "(" + strings.Join(items, " ") + ")"
-			default:
-				target = lispNames(in.Target.Table.Parts)
-			}
-			s = "(" + not(in.Not) + "IN " + s + " " + target + ")"
-		case tail.Like != nil:
-			like := tail.Like
-			s = "(" + not(like.Not) + like.Op.TokValue + " " + s + " " + lispRel(like.Pattern)
-			if like.Escape != nil {
-				s += " ESCAPE " + lispRel(like.Escape.Expr)
-			}
-			s += ")"
-		}
-	}
-	return s
-}
-
-func lispRel(e RelExpr) string {
-	s := lispBit(e.First)
-	for _, t := range e.Rest {
-		s = "(" + t.Op.TokValue + " " + s + " " + lispBit(t.Expr) + ")"
-	}
-	return s
-}
-
-func lispBit(e BitExpr) string {
-	s := lispAdd(e.First)
-	for _, t := range e.Rest {
-		s = "(" + t.Op.TokValue + " " + s + " " + lispAdd(t.Expr) + ")"
-	}
-	return s
-}
-
-func lispAdd(e AddExpr) string {
-	s := lispMul(e.First)
-	for _, t := range e.Rest {
-		s = "(" + t.Op.TokValue + " " + s + " " + lispMul(t.Expr) + ")"
-	}
-	return s
-}
-
-func lispMul(e MulExpr) string {
-	s := lispConcat(e.First)
-	for _, t := range e.Rest {
-		s = "(" + t.Op.TokValue + " " + s + " " + lispConcat(t.Expr) + ")"
-	}
-	return s
-}
-
-func lispConcat(e ConcatExpr) string {
-	s := lispUnary(e.First)
-	for _, t := range e.Rest {
-		s = "(" + t.Op.TokValue + " " + s + " " + lispUnary(t.Expr) + ")"
-	}
-	return s
-}
-
-func lispUnary(e UnaryExpr) string {
-	if e.Op != nil {
-		return "(" + e.Op.Op.TokValue + " " + lispUnary(e.Op.Expr) + ")"
-	}
-	s := lispAtom(e.Collate.Atom)
-	for _, c := range e.Collate.Collate {
-		s = "(COLLATE " + s + " " + c.Name.TokValue + ")"
-	}
-	return s
-}
-
 func lispNames(names []Name) string {
 	var parts []string
 	for _, n := range names {
 		parts = append(parts, n.TokValue)
 	}
 	return strings.Join(parts, ".")
+}
+
+// lispTerms folds a flat operator list from the left.
+func lispTerms[T any](first string, rest []T, term func(T) (string, *Expr)) string {
+	s := first
+	for _, t := range rest {
+		op, x := term(t)
+		s = "(" + op + " " + s + " " + lisp(x) + ")"
+	}
+	return s
 }
 
 func lispAtom(a Atom) string {
