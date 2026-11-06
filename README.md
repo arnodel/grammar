@@ -248,8 +248,10 @@ in two ways that matter when you write rules:
   not try again with fewer items.
 
 Results are memoised by rule type and position, so parsing is linear in the
-size of the input for grammars whose alternatives share prefixes, and the same
-sub-rule is never parsed twice at the same place.
+size of the input for grammars whose alternatives share prefixes.  A rule is
+memoised once it is parsed a second time at the same place (most rules never
+are, and memoising them would cost more than it saves), so the same sub-rule
+is parsed at most twice at the same place.
 
 A `OneOf` does not try an alternative that cannot start with the next token,
 nor does a `Seq` try an optional field or a repeated item that cannot: the

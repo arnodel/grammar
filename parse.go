@@ -6,6 +6,7 @@ import (
 	"log"
 	"reflect"
 	"strings"
+	"sync"
 )
 
 // memoKey identifies a memoised rule at a given stream position.
@@ -31,6 +32,66 @@ type memoValue struct {
 type memoTable struct {
 	heads   []*memoValue // by position
 	entries blocks[memoValue]
+	// seen has a bit per (position, rule type): set once the rule has been
+	// parsed at the position.  A rule is only memoised when it is parsed
+	// there a second time, so rules that are never retried cost no entry.
+	seen   []uint64 // stride words per position
+	stride int
+}
+
+// parsedBefore marks rule id as parsed at pos and reports whether it already
+// was.
+func (t *memoTable) parsedBefore(pos, id int) bool {
+	w, bit := id/64, uint64(1)<<(id%64)
+	if w >= t.stride {
+		t.widen(w + 1)
+	}
+	if pos >= len(t.seen)/t.stride {
+		seen := make([]uint64, max(pos+1, 2*len(t.seen)/t.stride, 64)*t.stride)
+		copy(seen, t.seen)
+		t.seen = seen
+	}
+	i := pos*t.stride + w
+	if t.seen[i]&bit != 0 {
+		return true
+	}
+	t.seen[i] |= bit
+	return false
+}
+
+// widen lays seen out again with more words per position.
+func (t *memoTable) widen(stride int) {
+	n := 0
+	if t.stride > 0 {
+		n = len(t.seen) / t.stride
+	}
+	seen := make([]uint64, n*stride)
+	for p := 0; p < n; p++ {
+		copy(seen[p*stride:], t.seen[p*t.stride:(p+1)*t.stride])
+	}
+	t.seen, t.stride = seen, stride
+}
+
+// ruleIDs numbers the rule types, for memoTable.seen.
+var (
+	ruleIDs    atomicMap[reflect.Type, int]
+	ruleIDMu   sync.Mutex
+	nextRuleID int
+)
+
+func ruleID(t reflect.Type) int {
+	if id, ok := ruleIDs.load(t); ok {
+		return id
+	}
+	ruleIDMu.Lock()
+	defer ruleIDMu.Unlock()
+	if id, ok := ruleIDs.load(t); ok {
+		return id
+	}
+	id := nextRuleID
+	nextRuleID++
+	ruleIDs.store(t, id)
+	return id
 }
 
 func (t *memoTable) get(pos int, key memoKey) *memoValue {
@@ -70,10 +131,11 @@ func (t *memoTable) delete(pos int, key memoKey) {
 	}
 }
 
-// stackEntry is a memoised rule being parsed.
+// stackEntry is a rule being parsed.
 type stackEntry struct {
-	pos int
-	key memoKey
+	pos   int
+	key   memoKey
+	entry *memoValue // created by a left-recursive reference to an unmemoised rule
 }
 
 type ParserState struct {
@@ -307,6 +369,10 @@ func ParseWithOptions(dest any, s *ParserState, opts TokenOptions) *ParseError {
 	if !ok {
 		return parseUnmemoized(dest, s, opts)
 	}
+	p, ok := dest.(Parser)
+	if !ok {
+		panic(fmt.Sprintf("invalid type for rule %#v", dest))
+	}
 	pos := s.Save()
 	key := memoKey{ruleType: reflect.TypeOf(dest), extra: m.MemoKey(opts)}
 	memoVal := s.memo.get(pos, key)
@@ -343,53 +409,81 @@ func ParseWithOptions(dest any, s *ParserState, opts TokenOptions) *ParseError {
 			reflect.ValueOf(dest).Elem().Set(reflect.ValueOf(memoVal.val).Elem())
 			return nil
 		}
+	} else {
+		// Not memoised.  The rules being parsed at this very position are
+		// at the top of the stack; if this one is among them, the reference
+		// is left recursive: its entry is created now, as a failing seed.
+		for i := len(s.keyStack) - 1; i >= 0 && s.keyStack[i].pos == pos; i-- {
+			if s.keyStack[i].key != key {
+				continue
+			}
+			for j := len(s.keyStack) - 1; j > i; j-- {
+				s.memo.delete(s.keyStack[j].pos, s.keyStack[j].key)
+			}
+			memoVal = s.memo.add(pos, key)
+			memoVal.rec = true
+			memoVal.accessed = true
+			s.keyStack[i].entry = memoVal
+			return s.failRecursion(pos)
+		}
 	}
 
-	switch p := dest.(type) {
-	case Parser:
-		if s.Debug() {
-			s.Logf("===> %T, %v", p, opts)
-		}
-		s.keyStack = append(s.keyStack, stackEntry{pos: pos, key: key})
-		memoVal := s.memo.add(pos, key)
+	if s.Debug() {
+		s.Logf("===> %T, %v", p, opts)
+	}
+	s.keyStack = append(s.keyStack, stackEntry{pos: pos, key: key})
+	// A rule parsed for the first time at pos is not memoised unless it
+	// turns out to be left recursive; parsed there again, it is.
+	if key.extra != nil || s.memo.parsedBefore(pos, ruleID(key.ruleType)) {
+		memoVal = s.memo.add(pos, key)
 		memoVal.val = dest
 		memoVal.rec = true // Until done, a reference to this rule is left recursive.
-		err := s.fold(p.Parse(dest, s, opts))
+	}
+	err := s.fold(p.Parse(dest, s, opts))
+	top := len(s.keyStack) - 1
+	if memoVal == nil && s.keyStack[top].entry != nil {
+		memoVal = s.keyStack[top].entry // created by a left-recursive reference
+		memoVal.val = dest
+	}
+	if memoVal == nil {
+		s.keyStack = s.keyStack[:top]
 		if s.Debug() {
-			s.Logf("XX %T, memoVal: %v", dest, *memoVal)
-		}
-		if err == nil {
-			memoVal.ok = true
-			memoVal.pos = s.Save()
-			for memoVal.accessed {
-				// Grow the seed: re-parse with the last result as the
-				// left-recursive reference, while that gets further.
-				seed := reflect.New(reflect.TypeOf(dest).Elem())
-				seed.Elem().Set(reflect.ValueOf(dest).Elem())
-				memoVal.val = seed.Interface()
-				memoVal.accessed = false
-				s.Restore(pos)
-				reflect.ValueOf(dest).Elem().SetZero()
-				if p.Parse(dest, s, opts) != nil || s.Save() <= memoVal.pos {
-					reflect.ValueOf(dest).Elem().Set(seed.Elem())
-					s.Restore(memoVal.pos)
-					break
-				}
-				memoVal.pos = s.Save()
-			}
-			memoVal.val = dest
-		} else {
-			memoVal.err = err
-		}
-		memoVal.rec = false
-		s.keyStack = s.keyStack[:len(s.keyStack)-1]
-		if s.Debug() {
-			s.Logf("<=== %s", err)
+			s.Logf("<=== %s (not memoised)", err)
 		}
 		return err
-	default:
-		panic(fmt.Sprintf("invalid type for rule %#v", dest))
 	}
+	if s.Debug() {
+		s.Logf("XX %T, memoVal: %v", dest, *memoVal)
+	}
+	if err == nil {
+		memoVal.ok = true
+		memoVal.pos = s.Save()
+		for memoVal.accessed {
+			// Grow the seed: re-parse with the last result as the
+			// left-recursive reference, while that gets further.
+			seed := reflect.New(reflect.TypeOf(dest).Elem())
+			seed.Elem().Set(reflect.ValueOf(dest).Elem())
+			memoVal.val = seed.Interface()
+			memoVal.accessed = false
+			s.Restore(pos)
+			reflect.ValueOf(dest).Elem().SetZero()
+			if p.Parse(dest, s, opts) != nil || s.Save() <= memoVal.pos {
+				reflect.ValueOf(dest).Elem().Set(seed.Elem())
+				s.Restore(memoVal.pos)
+				break
+			}
+			memoVal.pos = s.Save()
+		}
+		memoVal.val = dest
+	} else {
+		memoVal.err = err
+	}
+	memoVal.rec = false
+	s.keyStack = s.keyStack[:top]
+	if s.Debug() {
+		s.Logf("<=== %s", err)
+	}
+	return err
 }
 
 // failRecursion is the failure of a left-recursive reference to a rule
