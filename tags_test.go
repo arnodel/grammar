@@ -165,6 +165,26 @@ func newSized[T sized]() (any, func() int) {
 	}
 }
 
+// --- an item that consumes nothing ---
+
+type ttAnyTokens struct {
+	Seq
+	Items []Tok // no tok tag: matches without consuming anything
+}
+
+func TestRepeatedEmptyItem(t *testing.T) {
+	toks, _ := tagTestTokenise(`1 2`)
+	var r ttAnyTokens
+	if err := Parse(&r, toks); err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+	// One empty item: the repetition stops there rather than matching
+	// nothing forever.
+	if len(r.Items) != 1 || r.Items[0].TokType != "" {
+		t.Errorf("got %d items: %v", len(r.Items), r.Items)
+	}
+}
+
 // --- lookahead with "*" ---
 
 // A number followed by a bracket, where the bracket is checked but left for
@@ -231,6 +251,15 @@ type ttErrItems struct {
 	Items []ttNum `sep:"op,,"`
 }
 
+type ttErrOneOf struct {
+	OneOf
+	Word  *Tok `tok:"word"`
+	Num   *ttNum
+	Open  *Tok `tok:"op,("`
+	Close *Tok `tok:"op,)"`
+	Any   *Tok `tok:"word|op,("` // repeats, not listed twice
+}
+
 type ttErrDup struct {
 	OneOf
 	Word *Tok `tok:"word"`
@@ -250,15 +279,6 @@ func TestErrorOptionsUnique(t *testing.T) {
 	if !reflect.DeepEqual(err.TokenParseOptions, want) {
 		t.Errorf("got options %v, want %v", err.TokenParseOptions, want)
 	}
-}
-
-type ttErrOneOf struct {
-	OneOf
-	Word  *Tok `tok:"word"`
-	Num   *ttNum
-	Open  *Tok `tok:"op,("`
-	Close *Tok `tok:"op,)"`
-	Any   *Tok `tok:"word|op,("` // repeats, not listed twice
 }
 
 func TestErrorMessages(t *testing.T) {

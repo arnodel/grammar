@@ -12,7 +12,8 @@ import (
 // memoKey identifies a memoised rule at a given stream position.
 type memoKey struct {
 	ruleType reflect.Type
-	extra    any // from Memoisable.MemoKey
+	extra    any   // from Memoisable.MemoKey
+	bound    Bound // precedence bound the rule was parsed under
 }
 
 type memoValue struct {
@@ -145,6 +146,179 @@ type ParserState struct {
 	fail     ParseError // the furthest failure so far, see recordFailure
 	logger   *log.Logger
 	exhaust  bool
+
+	// Operator precedence (see the "prec" tag).  prec is the bound set for
+	// the next rule parsed; ParseWithOptions moves it to bound for that rule
+	// to read.  pending is the level of the OneOf alternative being tried,
+	// for the Seq rule parsing it to apply to its fields.
+	prec    Bound
+	bound   Bound
+	pending PendingPrec
+
+	// Left recursion by request (see Alternatives): seedEnd is set for a
+	// rule being re-parsed to grow its seed, growRequested by a rule that
+	// skipped its left-recursive alternatives.
+	seedEnd       int
+	growRequested bool
+}
+
+// A Bound is a precedence bound: an operand is parsed under the level of the
+// operator it belongs to, and only the sum rule of that operator's family
+// (the type of its left operand) is constrained by it; a bound with no
+// family constrains whichever sum rule it reaches.
+type Bound struct {
+	Level  int
+	Family reflect.Type
+}
+
+// PendingPrec is the precedence of the OneOf alternative being parsed, for
+// the Seq rule parsing it: its first field (the left operand) is parsed
+// under the bound the OneOf was entered with, the others under the level.
+type PendingPrec struct {
+	level  int
+	family reflect.Type
+	outer  Bound
+	set    bool
+}
+
+// Prec returns the bound for field i of the rule, none if there is none.
+func (p PendingPrec) Prec(i int) Bound {
+	switch {
+	case !p.set:
+		return Bound{}
+	case i == 0:
+		return p.outer
+	default:
+		return Bound{Level: p.level, Family: p.family}
+	}
+}
+
+// TakePending returns the pending precedence for the Seq rule being parsed
+// and clears it.
+func (s *ParserState) TakePending() PendingPrec {
+	p := s.pending
+	s.pending.set = false
+	return p
+}
+
+// TakePendingOr is TakePending for a rule with its own precedence (has): if
+// no precedence is pending, the fields after the first are bound to level.
+func (s *ParserState) TakePendingOr(level int, has bool) PendingPrec {
+	p := s.TakePending()
+	if !p.set && has {
+		// Entered on its own: its operands belong to the same family as
+		// the rule itself was parsed for.
+		p = PendingPrec{level: level, family: s.bound.Family, outer: s.bound, set: true}
+	}
+	return p
+}
+
+// SetPrec sets the precedence bound for the next rule parsed.
+func (s *ParserState) SetPrec(b Bound) { s.prec = b }
+
+// TokenAt returns the token at position pos without moving the stream.
+func (s *ParserState) TokenAt(pos int) Token {
+	cur := s.Save()
+	s.Restore(pos)
+	tok := s.Next()
+	s.Restore(cur)
+	return tok
+}
+
+// Alternatives decides which alternatives of a OneOf rule to try: those whose
+// precedence is above the bound; when the rule is being re-parsed to grow
+// the seed of a left recursion, only the left-recursive ones, and only if
+// the token after the seed can follow their left operand; otherwise only
+// the others, the left-recursive ones being bound to fail on their own
+// reference (Done then asks for the rule to be re-parsed).
+type Alternatives struct {
+	s                *ParserState
+	t                reflect.Type // the sum rule type
+	bound            Bound        // as entered with
+	level            int          // the level that constrains t: the bound's if it is for t
+	seedEnd          int
+	afterSeed        Token
+	growing, skipped bool
+}
+
+// Alternatives starts choosing the alternatives of the OneOf rule of type t
+// being parsed; call it before anything else.
+func (s *ParserState) Alternatives(t reflect.Type) Alternatives {
+	a := Alternatives{s: s, t: t, bound: s.bound, seedEnd: s.seedEnd, growing: s.seedEnd >= 0}
+	if a.bound.Family == nil || a.bound.Family == t {
+		a.level = a.bound.Level
+	}
+	if a.growing {
+		a.afterSeed = s.TokenAt(a.seedEnd)
+	}
+	return a
+}
+
+// AlternativesOf is Alternatives for the rule type T, for generated code.
+func AlternativesOf[T any](s *ParserState) Alternatives {
+	return s.Alternatives(reflect.TypeFor[T]())
+}
+
+// Level returns the precedence level that constrains the alternatives.
+func (a *Alternatives) Level() int { return a.level }
+
+// PendingFor returns the pending precedence for parsing the fields of the
+// alternative lr after its left operand.
+func (a *Alternatives) PendingFor(lr LeftRecInfo) PendingPrec {
+	family := lr.family
+	if family == nil {
+		family = a.t // a prefix operator binds an operand of this rule's family
+	}
+	return PendingPrec{level: lr.prec, family: family, outer: a.bound, set: true}
+}
+
+// Try reports whether to try an alternative, given its left recursion info,
+// precedence and first set; when not, the error has the expected tokens
+// recorded.
+func (a *Alternatives) Try(lr LeftRecInfo, first FirstSet) (bool, *ParseError) {
+	if lr.kind != notLeftRec && lr.hasPrec && a.level >= lr.prec {
+		// An operator that does not bind tightly enough.  A prefix operator
+		// (not left recursive) always applies: its precedence only binds
+		// its operand.
+		return false, nil
+	}
+	switch lr.kind {
+	case directLeftRec:
+		if !a.growing {
+			a.skipped = true
+			return false, nil
+		}
+		if err := lr.cont.checkAt(a.s, a.seedEnd, a.afterSeed); err != nil {
+			return false, err
+		}
+		return true, nil
+	case notLeftRec:
+		if a.growing {
+			return false, nil // would give the seed again at best
+		}
+	}
+	if err := first.check(a.s); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// Enter sets the precedence for the alternative about to be parsed.
+func (a *Alternatives) Enter(lr LeftRecInfo) {
+	if lr.hasPrec {
+		a.s.pending = a.PendingFor(lr)
+		a.s.prec = a.bound
+	}
+}
+
+// Leave is called after an alternative was parsed, whatever the outcome.
+func (a *Alternatives) Leave() { a.s.pending.set = false }
+
+// Done is called when the OneOf rule is done, whatever the outcome.
+func (a *Alternatives) Done() {
+	if a.skipped {
+		a.s.growRequested = true
+	}
 }
 
 // Fail records that parsing failed at stream position pos, on token tok, for
@@ -394,7 +568,9 @@ func ParseWithOptions(dest any, s *ParserState, opts TokenOptions) *ParseError {
 		panic(fmt.Sprintf("invalid type for rule %#v", dest))
 	}
 	pos := s.Save()
-	key := memoKey{ruleType: reflect.TypeOf(dest), extra: m.MemoKey(opts)}
+	bound := s.prec
+	s.prec = Bound{}
+	key := memoKey{ruleType: reflect.TypeOf(dest), extra: m.MemoKey(opts), bound: bound}
 	memoVal := s.memo.get(pos, key)
 	if memoVal != nil {
 		if s.Debug() {
@@ -459,11 +635,25 @@ func ParseWithOptions(dest any, s *ParserState, opts TokenOptions) *ParseError {
 		memoVal.val = dest
 		memoVal.rec = true // Until done, a reference to this rule is left recursive.
 	}
+	s.bound = bound
+	s.seedEnd = -1
+	s.growRequested = false
 	err := s.fold(p.Parse(dest, s, opts))
 	top := len(s.keyStack) - 1
 	if memoVal == nil && s.keyStack[top].entry != nil {
 		memoVal = s.keyStack[top].entry // created by a left-recursive reference
 		memoVal.val = dest
+	}
+	if s.growRequested {
+		s.growRequested = false
+		if err == nil {
+			if memoVal == nil {
+				memoVal = s.memo.add(pos, key)
+				memoVal.rec = true
+			}
+			memoVal.val = dest
+			memoVal.accessed = true
+		}
 	}
 	if memoVal == nil {
 		s.keyStack = s.keyStack[:top]
@@ -487,6 +677,9 @@ func ParseWithOptions(dest any, s *ParserState, opts TokenOptions) *ParseError {
 			memoVal.accessed = false
 			s.Restore(pos)
 			reflect.ValueOf(dest).Elem().SetZero()
+			s.bound = bound
+			s.seedEnd = int(memoVal.pos)
+			s.growRequested = false
 			if p.Parse(dest, s, opts) != nil || s.Save() <= memoVal.pos {
 				reflect.ValueOf(dest).Elem().Set(seed.Elem())
 				s.Restore(memoVal.pos)
@@ -661,5 +854,9 @@ func parseUnmemoized(dest any, s *ParserState, opts TokenOptions) *ParseError {
 	if !ok {
 		panic(fmt.Sprintf("invalid type for rule %#v", dest))
 	}
-	return s.fold(p.Parse(dest, s, opts))
+	s.bound, s.prec = s.prec, Bound{}
+	s.seedEnd = -1
+	err := s.fold(p.Parse(dest, s, opts))
+	s.growRequested = false
+	return err
 }

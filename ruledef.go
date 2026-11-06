@@ -13,7 +13,12 @@ type RuleDef struct {
 	OneOf       bool
 	DropOptions TokenOptions
 	Fields      []RuleField
-	firsts      []FirstSet // of the fields, filled by computeFirstSets
+	firsts      []FirstSet    // of the fields, filled by computeFirstSets
+	leftRec     []LeftRecInfo // for a OneOf: by field, see leftRecursion
+	// The prec tag of the Seq or OneOf field: the precedence of an operator
+	// rule, or the default precedence of the alternatives of a OneOf.
+	Prec    int
+	HasPrec bool
 }
 
 type RuleField struct {
@@ -64,6 +69,7 @@ type RepeatOptions struct {
 	Trail TrailMode
 	Drop  TokenOptions // tokens to skip before each item and separator
 	First FirstSet     // of an item
+	Prec  Bound        // precedence bound for each item
 }
 
 // RepeatOptions returns the repeat options of the field, with the given drop
@@ -228,9 +234,18 @@ func calcRuleDef(tp reflect.Type) (*RuleDef, error) {
 	seq := field0.Type == reflect.TypeOf(Seq{})
 	tok := field0.Type == reflect.TypeOf(Tok{})
 	var dropOptions TokenOptions
+	var prec int
+	var hasPrec bool
 	if oneOf || seq {
 		firstFieldIndex++
 		dropOptions = tokenOptionsFromTagValue(field0.Tag.Get("drop"))
+		if precTag, ok := field0.Tag.Lookup("prec"); ok {
+			p, err := strconv.Atoi(precTag)
+			if err != nil || p < 0 {
+				return nil, fmt.Errorf("rule type %s: invalid prec tag %q", tp, precTag)
+			}
+			prec, hasPrec = p, true
+		}
 	} else if tok {
 		if numField > 1 {
 			return nil, fmt.Errorf("Tok rule type %s must have exactly one field", tp)
@@ -257,6 +272,9 @@ func calcRuleDef(tp reflect.Type) (*RuleDef, error) {
 			Trail:        trail,
 			Name:         field.Name,
 			Index:        fieldIndex,
+		}
+		if _, ok := field.Tag.Lookup("prec"); ok {
+			return nil, fmt.Errorf("field %s of rule type %s: a prec tag goes on the Seq field of an operator rule", field.Name, tp)
 		}
 		if trail != TrailNone && len(ruleField.SepOptions.TokenParseOptions) == 0 {
 			return nil, fmt.Errorf("field %s of rule type %s: %w", field.Name, tp, errTrailWithoutSep)
@@ -287,6 +305,8 @@ func calcRuleDef(tp reflect.Type) (*RuleDef, error) {
 		OneOf:       oneOf,
 		Fields:      ruleFields,
 		DropOptions: dropOptions,
+		Prec:        prec,
+		HasPrec:     hasPrec,
 	}, nil
 }
 
