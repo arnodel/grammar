@@ -33,7 +33,9 @@ func TestExprPrecedence(t *testing.T) {
 		{`x & 1 | 2 << 3`, `(<< (| (& x 1) 2) 3)`},
 		{`CASE a WHEN 1 THEN 'x' ELSE 'y' END`, `(CASE a (WHEN 1 'x') (ELSE 'y'))`},
 		{`CASE WHEN a THEN 1 END`, `(CASE (WHEN a 1))`},
-		{`count(DISTINCT a) FILTER (WHERE b) OVER w`, `(count DISTINCT a FILTER OVER)`},
+		{`count(DISTINCT a) FILTER (WHERE b > 1) OVER w`, `(count DISTINCT a (FILTER (> b 1)) (OVER w))`},
+		{`sum(x) OVER (PARTITION BY d, e ORDER BY s DESC ROWS UNBOUNDED PRECEDING)`, `(sum x (OVER (PARTITION d e) (ORDER (s DESC)) (ROWS ...)))`},
+		{`sum(x) OVER (w ORDER BY s)`, `(sum x (OVER w (ORDER s)))`},
 		{`count(*)`, `(count *)`},
 		{`f()`, `(f)`},
 		{`(1, 2) = (3, 4)`, `(= (ROW 1 2) (ROW 3 4))`},
@@ -209,6 +211,39 @@ func lispTerms[T any](first string, rest []T, term func(T) (string, *Expr)) stri
 	return s
 }
 
+func lispOver(o *OverClause) string {
+	if o.Window.Name != nil {
+		return "(OVER " + o.Window.Name.TokValue + ")"
+	}
+	def := o.Window.Def
+	parts := []string{"OVER"}
+	if def.Base != nil {
+		parts = append(parts, def.Base.TokValue)
+	}
+	if def.Partition != nil {
+		var exprs []string
+		for i := range def.Partition.Exprs {
+			exprs = append(exprs, lisp(&def.Partition.Exprs[i]))
+		}
+		parts = append(parts, "(PARTITION "+strings.Join(exprs, " ")+")")
+	}
+	if def.OrderBy != nil {
+		var terms []string
+		for i := range def.OrderBy.Terms {
+			term := lisp(&def.OrderBy.Terms[i].Expr)
+			if dir := def.OrderBy.Terms[i].Dir; dir != nil {
+				term = "(" + term + " " + dir.TokValue + ")"
+			}
+			terms = append(terms, term)
+		}
+		parts = append(parts, "(ORDER "+strings.Join(terms, " ")+")")
+	}
+	if def.Frame != nil {
+		parts = append(parts, "("+def.Frame.Mode.TokValue+" ...)")
+	}
+	return "(" + strings.Join(parts, " ") + ")"
+}
+
 func lispAtom(a Atom) string {
 	switch {
 	case a.Literal != nil:
@@ -256,10 +291,10 @@ func lispAtom(a Atom) string {
 			parts = append(parts, lisp(&arg))
 		}
 		if f.Filter != nil {
-			parts = append(parts, "FILTER")
+			parts = append(parts, "(FILTER "+lisp(&f.Filter.Where.Expr)+")")
 		}
 		if f.Over != nil {
-			parts = append(parts, "OVER")
+			parts = append(parts, lispOver(f.Over))
 		}
 		return "(" + strings.Join(parts, " ") + ")"
 	case a.Column != nil:
