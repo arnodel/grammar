@@ -52,3 +52,45 @@ func TestMemoTable(t *testing.T) {
 		t.Fatal("re-add")
 	}
 }
+
+func TestMemoSeen(t *testing.T) {
+	var m memoTable
+	// First time false, second time true, independently per position and
+	// rule id, including ids beyond the first word and positions beyond the
+	// initial size.
+	for _, pos := range []int{0, 5, 1000} {
+		for _, id := range []int{0, 1, 63, 64, 200} {
+			if m.parsedBefore(pos, id) {
+				t.Errorf("pos %d id %d: seen before first parse", pos, id)
+			}
+			if !m.parsedBefore(pos, id) {
+				t.Errorf("pos %d id %d: not seen after first parse", pos, id)
+			}
+		}
+	}
+	// Widening keeps what was marked.
+	if !m.parsedBefore(5, 63) || m.parsedBefore(5, 62) || m.parsedBefore(6, 63) {
+		t.Error("bits lost or gained when widening")
+	}
+}
+
+// A rule parsed once at a position is not memoised; parsed again there it is.
+func TestLazyMemo(t *testing.T) {
+	toks, _ := parseTestTokenise(`1 + 2`)
+	s := &ParserState{TokenStream: toks}
+	var n1, n2 ptSum
+	if err := ParseWithOptions(&n1, s, TokenOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	key := memoKey{ruleType: reflect.TypeOf(&n1)}
+	if s.memo.get(0, key) != nil {
+		t.Error("memoised on first parse")
+	}
+	s.Restore(0)
+	if err := ParseWithOptions(&n2, s, TokenOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if v := s.memo.get(0, key); v == nil || !v.ok || v.pos != 3 {
+		t.Errorf("not memoised on second parse: %+v", v)
+	}
+}
