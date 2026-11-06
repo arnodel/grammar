@@ -8,8 +8,19 @@ import (
 	"github.com/arnodel/grammar"
 )
 
-// TestExprPrecedence checks the shape of the expression trees by printing
-// them as S-expressions.
+// TestExprPrecedence checks the shape of the expression trees: precedence,
+// associativity, prefix and postfix operators, and the predicates.
+//
+// Comparing trees directly would need an expected tree per case, many lines
+// each, and most of each tree is the same wrapping.  Instead the tree is
+// printed as an S-expression by lisp below, so that an expectation is one
+// line that reads like the parse: `1 + 2 * 3` must give `(+ 1 (* 2 3))`.
+// The printer is a type switch per level of the tree, so writing it is also
+// a check that the tree is usable as it is.  It renders what the test is
+// about: operators with their operands, atoms as their token, a function
+// call with its arguments and its FILTER and OVER clauses, a subquery as
+// `(SELECT)`.  The wording of the operators (`NOT IN`, `IS DISTINCT FROM`,
+// `ESCAPE`) is kept so that the predicates read as in SQL.
 func TestExprPrecedence(t *testing.T) {
 	tests := []struct{ src, want string }{
 		{`1 + 2 * 3`, `(+ 1 (* 2 3))`},
@@ -65,8 +76,11 @@ func TestExprPrecedence(t *testing.T) {
 	}
 }
 
-// lisp writes an expression tree as an S-expression.  Flat lists are
-// folded from the left, as SQL operators are left associative.
+// lisp writes an expression tree as an S-expression: a type switch on the
+// alternative that matched at each level of the tree (the groups, then the
+// operators).  A flat list like Add is folded from the left, as SQL
+// operators are left associative: `1 - 2 - 3` is `(- (- 1 2) 3)`.  OR and
+// AND are printed n-ary since they are associative.
 func lisp(e *Expr) string {
 	switch v := e.Value.(type) {
 	case *Logical:
