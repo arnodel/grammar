@@ -4,98 +4,130 @@ import "github.com/arnodel/grammar"
 
 //go:generate go run github.com/arnodel/grammar/cmd/genparse
 
-// Expressions, from the lowest to the highest precedence.  Each binary level
-// is a list "operand (op operand)*" rather than a left-recursive rule: that is
-// the natural shape for the n-ary AND and OR, it is cheaper to parse, and a
-// consumer folding the list from the left gets left associativity.
+// Expressions.  Expr is a sum of the operator rules, in semantic groups,
+// and the atoms.  An operator rule carries its precedence on its Seq field,
+// or gets it from its group: it only applies when the bound in effect is
+// lower, and its operands after the first are parsed under its own
+// precedence, which is what gives operators their binding power; the first
+// operand, when it is an Expr, is the left recursive reference.  Rules
+// without a precedence (atoms) always apply and reset the bound.  A prefix
+// operator is not left recursive, so its precedence only binds its operand.
 //
 // The precedence levels are those of SQLite:
 //
-//	OR
-//	AND
-//	NOT (prefix)
-//	= == != <> IS IS NOT BETWEEN IN LIKE GLOB REGEXP MATCH ISNULL NOTNULL NOT NULL
-//	< > <= >=
-//	& | << >>
-//	+ -
-//	* / %
-//	|| -> ->>
-//	- + ~ (prefix)
-//	COLLATE (postfix)
-
-// Expr ::= AndExpr (OR AndExpr)*
+//	1  OR
+//	2  AND
+//	3  NOT (prefix)
+//	4  = == != <> IS IS NOT BETWEEN IN LIKE GLOB REGEXP MATCH ISNULL NOTNULL NOT NULL
+//	5  < > <= >=
+//	6  & | << >>
+//	7  + -
+//	8  * / %
+//	9  || -> ->>
+//	10 - + ~ (prefix)
+//	11 COLLATE (postfix)
+//
+// Expr is an expression: Value holds the alternative that matched.
 type Expr struct {
-	grammar.Seq
-	First AndExpr
-	Rest  []OrTerm
+	grammar.Sum[struct {
+		grammar.OneOf
+		Logical       *Logical
+		Comparison    *Comparison
+		Bitwise       *Bitwise
+		Arithmetic    *Arithmetic
+		Concatenation *Concatenation
+		Collate       *Collate
+		Atom          *Atom
+	}]
+}
+
+// ---- Logical operators: OR, AND, NOT ----
+
+type Logical struct {
+	grammar.Sum[struct {
+		grammar.OneOf
+		Or  *Or
+		And *And
+		Not *Not
+	}]
+}
+
+// Or ::= Expr (OR Expr)+, flat.
+type Or struct {
+	grammar.Seq `prec:"1"`
+	First       Expr
+	Rest        []OrTerm `size:"1-"`
 }
 
 type OrTerm struct {
-	grammar.Seq
-	Or   grammar.Match `tok:"kw,OR"`
-	Expr AndExpr
+	grammar.Seq `prec:"1"`
+	Or          grammar.Match `tok:"kw,OR"`
+	X           Expr
 }
 
-// AndExpr ::= NotExpr (AND NotExpr)*
-type AndExpr struct {
-	grammar.Seq
-	First NotExpr
-	Rest  []AndTerm
+// And ::= Expr (AND Expr)+, flat.
+type And struct {
+	grammar.Seq `prec:"2"`
+	First       Expr
+	Rest        []AndTerm `size:"1-"`
 }
 
 type AndTerm struct {
+	grammar.Seq `prec:"2"`
+	And         grammar.Match `tok:"kw,AND"`
+	X           Expr
+}
+
+// Not ::= NOT Expr
+type Not struct {
+	grammar.Seq `prec:"3"`
+	Not         grammar.Match `tok:"kw,NOT"`
+	X           Expr
+}
+
+// ---- Comparisons and predicates, all at level 4 except Ordering ----
+
+// The order only matters between alternatives that can both apply, like
+// NOT NULL, NOT BETWEEN, NOT IN and NOT LIKE.
+type Comparison struct {
+	grammar.Sum[struct {
+		grammar.OneOf `prec:"4"`
+		Equality      *Equality
+		Ordering      *Ordering
+		Is            *Is
+		NullTest      *NullTest
+		NotNull       *NotNull
+		Between       *Between
+		In            *In
+		PatternMatch  *PatternMatch
+	}]
+}
+
+// Equality ::= Expr ("=" | "==" | "!=" | "<>") Expr
+type Equality struct {
 	grammar.Seq
-	And  grammar.Match `tok:"kw,AND"`
-	Expr NotExpr
+	Lhs Expr
+	Op  Token `tok:"op,=|op,==|op,!=|op,<>"`
+	Rhs Expr
 }
 
-// NotExpr ::= NOT NotExpr | CmpExpr
-type NotExpr struct {
-	grammar.OneOf
-	Not *Negation
-	Cmp *CmpExpr
+// Ordering ::= Expr ("<" | ">" | "<=" | ">=") Expr, binding tighter than
+// equality.
+type Ordering struct {
+	grammar.Seq `prec:"5"`
+	Lhs         Expr
+	Op          Token `tok:"op,<|op,>|op,<=|op,>="`
+	Rhs         Expr
 }
 
-type Negation struct {
+// Is ::= Expr IS [NOT] [DISTINCT FROM] Expr
+type Is struct {
 	grammar.Seq
-	Not  grammar.Match `tok:"kw,NOT"`
-	Expr NotExpr
-}
-
-// CmpExpr ::= RelExpr CmpTail*
-//
-// The tails are the comparison operators proper and the various predicates
-// (IS, BETWEEN, IN, LIKE, ...), which all have the same precedence.
-type CmpExpr struct {
-	grammar.Seq
-	First RelExpr
-	Rest  []CmpTail
-}
-
-type CmpTail struct {
-	grammar.OneOf
-	Cmp     *CmpTerm
-	Is      *IsTerm
-	Null    *Token `tok:"kw,ISNULL|kw,NOTNULL"`
-	NotNull *NotNullTerm
-	Between *BetweenTerm
-	In      *InTerm
-	Like    *LikeTerm
-}
-
-type CmpTerm struct {
-	grammar.Seq
-	Op   Token `tok:"op,=|op,==|op,!=|op,<>"`
-	Expr RelExpr
-}
-
-// IsTerm ::= IS [NOT] [DISTINCT FROM] RelExpr
-type IsTerm struct {
-	grammar.Seq
+	Lhs      Expr
 	Is       grammar.Match `tok:"kw,IS"`
 	Not      *Token        `tok:"kw,NOT"`
 	Distinct *DistinctFrom
-	Expr     RelExpr
+	Rhs      Expr
 }
 
 type DistinctFrom struct {
@@ -104,25 +136,36 @@ type DistinctFrom struct {
 	From     grammar.Match `tok:"kw,FROM"`
 }
 
-type NotNullTerm struct {
+// NullTest ::= Expr (ISNULL | NOTNULL)
+type NullTest struct {
 	grammar.Seq
+	Lhs Expr
+	Op  Token `tok:"kw,ISNULL|kw,NOTNULL"`
+}
+
+// NotNull ::= Expr NOT NULL
+type NotNull struct {
+	grammar.Seq
+	Lhs  Expr
 	Not  grammar.Match `tok:"kw,NOT"`
 	Null grammar.Match `tok:"kw,NULL"`
 }
 
-// BetweenTerm ::= [NOT] BETWEEN RelExpr AND RelExpr
-type BetweenTerm struct {
+// Between ::= Expr [NOT] BETWEEN Expr AND Expr
+type Between struct {
 	grammar.Seq
+	Lhs     Expr
 	Not     *Token        `tok:"kw,NOT"`
 	Between grammar.Match `tok:"kw,BETWEEN"`
-	Low     RelExpr
+	Low     Expr
 	And     grammar.Match `tok:"kw,AND"`
-	High    RelExpr
+	High    Expr
 }
 
-// InTerm ::= [NOT] IN ( "(" [SelectStmt | Expr, ...] ")" | QualifiedName )
-type InTerm struct {
+// In ::= Expr [NOT] IN ( "(" [SelectStmt | Expr, ...] ")" | QualifiedName )
+type In struct {
 	grammar.Seq
+	Lhs    Expr
 	Not    *Token        `tok:"kw,NOT"`
 	In     grammar.Match `tok:"kw,IN"`
 	Target InTarget
@@ -142,110 +185,123 @@ type InList struct {
 	Close grammar.Match `tok:"op,)"`
 }
 
-// LikeTerm ::= [NOT] (LIKE | GLOB | REGEXP | MATCH) RelExpr [ESCAPE RelExpr]
-type LikeTerm struct {
+// PatternMatch ::= Expr [NOT] (LIKE | GLOB | REGEXP | MATCH) Expr [ESCAPE Expr]
+type PatternMatch struct {
 	grammar.Seq
+	Lhs     Expr
 	Not     *Token `tok:"kw,NOT"`
 	Op      Token  `tok:"kw,LIKE|kw,GLOB|kw,REGEXP|kw,MATCH"`
-	Pattern RelExpr
+	Pattern Expr
 	Escape  *EscapeClause
 }
 
 type EscapeClause struct {
-	grammar.Seq
-	Escape grammar.Match `tok:"kw,ESCAPE"`
-	Expr   RelExpr
+	grammar.Seq `prec:"4"`
+	Escape      grammar.Match `tok:"kw,ESCAPE"`
+	X           Expr
 }
 
-// RelExpr ::= BitExpr (("<" | ">" | "<=" | ">=") BitExpr)*
-type RelExpr struct {
-	grammar.Seq
-	First BitExpr
-	Rest  []RelTerm
+// ---- Bitwise operators ----
+
+type Bitwise struct {
+	grammar.Sum[struct {
+		grammar.OneOf
+		Binary     *BitwiseBinary
+		Complement *BitwiseComplement
+	}]
 }
 
-type RelTerm struct {
-	grammar.Seq
-	Op   Token `tok:"op,<|op,>|op,<=|op,>="`
-	Expr BitExpr
+// BitwiseBinary ::= Expr (("&" | "|" | "<<" | ">>") Expr)+, flat with the
+// operator of each term.
+type BitwiseBinary struct {
+	grammar.Seq `prec:"6"`
+	First       Expr
+	Rest        []BitwiseTerm `size:"1-"`
 }
 
-// BitExpr ::= AddExpr (("&" | "|" | "<<" | ">>") AddExpr)*
-type BitExpr struct {
-	grammar.Seq
-	First AddExpr
-	Rest  []BitTerm
+type BitwiseTerm struct {
+	grammar.Seq `prec:"6"`
+	Op          Token `tok:"op,&|bitor|op,<<|op,>>"`
+	X           Expr
 }
 
-type BitTerm struct {
-	grammar.Seq
-	Op   Token `tok:"op,&|bitor|op,<<|op,>>"`
-	Expr AddExpr
+// BitwiseComplement ::= "~" Expr
+type BitwiseComplement struct {
+	grammar.Seq `prec:"10"`
+	Tilde       grammar.Match `tok:"op,~"`
+	X           Expr
 }
 
-// AddExpr ::= MulExpr (("+" | "-") MulExpr)*
-type AddExpr struct {
-	grammar.Seq
-	First MulExpr
-	Rest  []AddTerm
+// ---- Arithmetic operators, the binary ones as flat lists with the
+// operator of each term ----
+
+type Arithmetic struct {
+	grammar.Sum[struct {
+		grammar.OneOf
+		Additive       *Additive
+		Multiplicative *Multiplicative
+		Sign           *Sign
+	}]
 }
 
-type AddTerm struct {
-	grammar.Seq
-	Op   Token `tok:"op,+|op,-"`
-	Expr MulExpr
+// Additive ::= Expr (("+" | "-") Expr)+
+type Additive struct {
+	grammar.Seq `prec:"7"`
+	First       Expr
+	Rest        []AdditiveTerm `size:"1-"`
 }
 
-// MulExpr ::= ConcatExpr (("*" | "/" | "%") ConcatExpr)*
-type MulExpr struct {
-	grammar.Seq
-	First ConcatExpr
-	Rest  []MulTerm
+type AdditiveTerm struct {
+	grammar.Seq `prec:"7"`
+	Op          Token `tok:"op,+|op,-"`
+	X           Expr
 }
 
-type MulTerm struct {
-	grammar.Seq
-	Op   Token `tok:"op,*|op,/|op,%"`
-	Expr ConcatExpr
+// Multiplicative ::= Expr (("*" | "/" | "%") Expr)+
+type Multiplicative struct {
+	grammar.Seq `prec:"8"`
+	First       Expr
+	Rest        []MultiplicativeTerm `size:"1-"`
 }
 
-// ConcatExpr ::= UnaryExpr (("||" | "->" | "->>") UnaryExpr)*
-type ConcatExpr struct {
-	grammar.Seq
-	First UnaryExpr
-	Rest  []ConcatTerm
+type MultiplicativeTerm struct {
+	grammar.Seq `prec:"8"`
+	Op          Token `tok:"op,*|op,/|op,%"`
+	X           Expr
 }
 
-type ConcatTerm struct {
-	grammar.Seq
-	Op   Token `tok:"concat|op,->|op,->>"`
-	Expr UnaryExpr
+// ---- String operators ----
+
+// Concatenation ::= Expr (("||" | "->" | "->>") Expr)+: string
+// concatenation and the JSON extraction operators, which SQLite puts at the
+// same level.
+type Concatenation struct {
+	grammar.Seq `prec:"9"`
+	First       Expr
+	Rest        []ConcatenationTerm `size:"1-"`
 }
 
-// UnaryExpr ::= ("-" | "+" | "~") UnaryExpr | CollateExpr
-type UnaryExpr struct {
-	grammar.OneOf
-	Op      *UnaryOp
-	Collate *CollateExpr
+type ConcatenationTerm struct {
+	grammar.Seq `prec:"9"`
+	Op          Token `tok:"concat|op,->|op,->>"`
+	X           Expr
 }
 
-type UnaryOp struct {
-	grammar.Seq
-	Op   Token `tok:"op,-|op,+|op,~"`
-	Expr UnaryExpr
+// Sign ::= ("-" | "+") Expr
+type Sign struct {
+	grammar.Seq `prec:"10"`
+	Op          Token `tok:"op,-|op,+"`
+	X           Expr
 }
 
-// CollateExpr ::= Atom (COLLATE Name)*
-type CollateExpr struct {
-	grammar.Seq
-	Atom    Atom
-	Collate []Collation
-}
+// ---- Collation, a postfix operator ----
 
-type Collation struct {
-	grammar.Seq
-	Collate grammar.Match `tok:"kw,COLLATE"`
-	Name    Name
+// Collate ::= Expr COLLATE Name
+type Collate struct {
+	grammar.Seq `prec:"11"`
+	Lhs         Expr
+	Collate     grammar.Match `tok:"kw,COLLATE"`
+	Name        Name
 }
 
 // Atom is an expression that does not involve an operator.  A function call

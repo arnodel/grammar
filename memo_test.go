@@ -162,3 +162,84 @@ func TestTokenOptionsKey(t *testing.T) {
 		t.Error("empty options should have a nil key")
 	}
 }
+
+// Two rules left recursive at the same position, one above the other: R is
+// X or a name, X is left recursive directly and through R.  Growing the seed
+// of R makes the result of X stale, and the memo must not reuse it.
+//
+//	R = X | Name
+//	X = X "*" Name | R ":" Name | Name
+type nlR struct {
+	OneOf
+	X    *nlX
+	Name *nlName
+}
+
+type nlX struct {
+	OneOf
+	Mul  *nlMul
+	Asc  *nlAsc
+	Name *nlName
+}
+
+type nlMul struct {
+	Seq
+	Lhs nlX
+	Op  Match `tok:"op,*"`
+	Rhs nlName
+}
+
+type nlAsc struct {
+	Seq
+	Lhs nlR
+	Op  Match `tok:"op,:"`
+	Rhs nlName
+}
+
+type nlName struct {
+	Tok `tok:"ident"`
+}
+
+var nlTokenise = SimpleTokeniser([]TokenDef{
+	{Ptn: `\s+`},
+	{Name: "op", Ptn: `[:*]`},
+	{Name: "ident", Ptn: `[a-zA-Z]+`},
+})
+
+func nlLispR(r *nlR) string {
+	if r.X != nil {
+		return nlLispX(r.X)
+	}
+	return r.Name.TokValue
+}
+
+func nlLispX(x *nlX) string {
+	switch {
+	case x.Mul != nil:
+		return "(* " + nlLispX(&x.Mul.Lhs) + " " + x.Mul.Rhs.TokValue + ")"
+	case x.Asc != nil:
+		return "(: " + nlLispR(&x.Asc.Lhs) + " " + x.Asc.Rhs.TokValue + ")"
+	}
+	return x.Name.TokValue
+}
+
+func TestNestedLeftRecursion(t *testing.T) {
+	tests := []struct{ src, want string }{
+		{`a * b`, `(* a b)`},
+		{`a : b`, `(: a b)`},
+		{`a * b : c`, `(: (* a b) c)`},
+		{`a : b * c`, `(* (: a b) c)`},
+		{`a : b : c * d`, `(* (: (: a b) c) d)`},
+	}
+	for _, tt := range tests {
+		toks, _ := nlTokenise(tt.src)
+		var r nlR
+		if err := Parse(&r, toks, Exhaust); err != nil {
+			t.Errorf("%s: %s", tt.src, err)
+			continue
+		}
+		if got := nlLispR(&r); got != tt.want {
+			t.Errorf("%s: got %s, want %s", tt.src, got, tt.want)
+		}
+	}
+}

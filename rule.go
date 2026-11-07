@@ -1,7 +1,6 @@
 package grammar
 
 import (
-	"fmt"
 	"io"
 	"reflect"
 )
@@ -45,42 +44,9 @@ func (OneOf) MemoKey(opts TokenOptions) any {
 	return nil
 }
 
+// Parse parses the rule as described in oneof.go.
 func (OneOf) Parse(r interface{}, s *ParserState, opts TokenOptions) *ParseError {
-	ruleDef, elem := getRuleDefAndValue(r)
-	var err, fieldErr *ParseError
-	ruleDef.DropOptions.DropMatchingNextTokens(s)
-	for i, ruleField := range ruleDef.Fields {
-		switch {
-		case ruleField.Pointer:
-			{
-				if fieldErr = ruleDef.firsts[i].check(s); fieldErr != nil {
-					err = err.Merge(fieldErr)
-					continue // cannot start with the next token
-				}
-				start := s.Save()
-				fieldPtrV := reflect.New(ruleField.BaseType)
-				fieldErr = ParseWithOptions(fieldPtrV.Interface(), s, ruleField.TokenOptions)
-				if fieldErr == nil {
-					elem.Field(ruleField.Index).Set(fieldPtrV)
-					return nil
-				}
-				s.Restore(start)
-				err = err.Merge(fieldErr)
-			}
-		case ruleField.Array:
-			itemsV, n, arrErr, ok := parseRepeated(ruleField, ruleDef.DropOptions, ruleDef.firsts[i], s)
-			err = err.Merge(arrErr)
-			if ok && n > 0 {
-				elem.Field(ruleField.Index).Set(itemsV)
-				return nil
-			}
-			// Nothing matched (or too few items): the stream is back where
-			// it was, try the next alternative.
-		default:
-			panic("should not get here")
-		}
-	}
-	return err
+	return parseOneOf(r, s)
 }
 
 // Seq should be used as the first field of a Rule struct to signify that it
@@ -97,15 +63,23 @@ func (Seq) MemoKey(opts TokenOptions) any {
 
 func (Seq) Parse(r interface{}, s *ParserState, opts TokenOptions) *ParseError {
 	ruleDef, elem := getRuleDefAndValue(r)
+	return seqParse(ruleDef, elem, s, 0, s.TakePendingOr(ruleDef.Prec))
+}
+
+// seqParse parses the fields of a Seq rule from index from into elem, each
+// under the bound the pending precedence gives it (see prec.go).
+func seqParse(ruleDef *RuleDef, elem reflect.Value, s *ParserState, from int, pending PendingPrec) *ParseError {
 	var err, fieldErr *ParseError
-	itemCount := 0
+	itemCount := from
 	var fieldPtrV reflect.Value
 	dropOptions := ruleDef.DropOptions
-	for i, ruleField := range ruleDef.Fields {
+	for i := from; i < len(ruleDef.Fields); i++ {
+		ruleField := ruleDef.Fields[i]
 		if s.Debug() {
 			s.Logf("  .%s tok #%d", ruleField.Name, s.Save())
 		}
 		dropOptions.DropMatchingNextTokens(s)
+		prec := pending.Prec(i)
 		switch {
 		case ruleField.Pointer:
 			{
@@ -115,6 +89,7 @@ func (Seq) Parse(r interface{}, s *ParserState, opts TokenOptions) *ParseError {
 				}
 				start := s.Save()
 				fieldPtrV = reflect.New(ruleField.BaseType)
+				s.SetPrec(prec)
 				fieldErr = ParseWithOptions(fieldPtrV.Interface(), s, ruleField.TokenOptions)
 				if fieldErr != nil {
 					err = err.Merge(fieldErr)
@@ -125,7 +100,7 @@ func (Seq) Parse(r interface{}, s *ParserState, opts TokenOptions) *ParseError {
 				}
 			}
 		case ruleField.Array:
-			itemsV, n, arrErr, ok := parseRepeated(ruleField, ruleDef.DropOptions, ruleDef.firsts[i], s)
+			itemsV, n, arrErr, ok := parseRepeated(ruleField, ruleDef.DropOptions, ruleDef.firsts[i], prec, s)
 			err = err.Merge(arrErr)
 			if !ok {
 				return err
@@ -134,6 +109,7 @@ func (Seq) Parse(r interface{}, s *ParserState, opts TokenOptions) *ParseError {
 			itemCount += n
 		default:
 			fieldPtrV = reflect.New(ruleField.BaseType)
+			s.SetPrec(prec)
 			fieldErr = ParseWithOptions(fieldPtrV.Interface(), s, ruleField.TokenOptions)
 			if fieldErr != nil {
 				return err.Merge(fieldErr)
@@ -149,13 +125,16 @@ func (Seq) Parse(r interface{}, s *ParserState, opts TokenOptions) *ParseError {
 }
 
 // parseRepeated parses the items of a repeated (slice) field by reflection,
-// using repeatCore for the logic.  It returns the slice of items, how many
-// there are, the error that stopped the repetition (nil if it stopped because
-// Max was reached) and whether at least Min items were found.
-func parseRepeated(ruleField RuleField, drop TokenOptions, first FirstSet, s *ParserState) (itemsV reflect.Value, n int, err *ParseError, ok bool) {
+// using repeatCore for the logic, each item under the precedence bound.  It
+// returns the slice of items, how many there are, the error that stopped the
+// repetition (nil if it stopped because Max was reached) and whether at least
+// Min items were found.
+func parseRepeated(ruleField RuleField, drop TokenOptions, first FirstSet, prec Bound, s *ParserState) (itemsV reflect.Value, n int, err *ParseError, ok bool) {
 	itemsV = reflect.Zero(reflect.SliceOf(ruleField.BaseType))
 	var itemPtrV reflect.Value
-	n, err, ok = repeatCore(s, ruleField.RepeatOptions(drop, first),
+	opts := ruleField.RepeatOptions(drop, first)
+	opts.Prec = prec
+	n, err, ok = repeatCore(s, opts,
 		func() *ParseError {
 			itemPtrV = reflect.New(ruleField.BaseType)
 			return ParseWithOptions(itemPtrV.Interface(), s, ruleField.TokenOptions)
@@ -192,6 +171,7 @@ func repeatCore(s *ParserState, opts RepeatOptions, parseItem func() *ParseError
 		afterSep := s.Save()
 		itemErr := opts.First.check(s) // skip an item that cannot start here
 		if itemErr == nil {
+			s.SetPrec(opts.Prec)
 			itemErr = parseItem()
 		}
 		if itemErr != nil {
@@ -215,24 +195,15 @@ func repeatCore(s *ParserState, opts RepeatOptions, parseItem func() *ParseError
 		}
 		keep()
 		n++
+		if s.Save() == itemStart {
+			break // an item that consumed nothing would match forever
+		}
 	}
 	if n < opts.Min {
 		s.Restore(fieldStart)
 		return n, err, false
 	}
 	return n, err, true
-}
-
-// emptyMatchError is the error for a Seq rule none of whose fields matched
-// anything.
-func emptyMatchError(s *ParserState, ruleName string) *ParseError {
-	pos := s.Save()
-	if s.beyondRecord(pos) {
-		return &s.fail
-	}
-	tok := s.Next()
-	s.Restore(pos)
-	return s.Fail(pos, tok, fmt.Errorf("empty match for rule %s", ruleName))
 }
 
 type Tok struct {

@@ -23,6 +23,12 @@ func TrailModeFromTag(tag string) (TrailMode, error) {
 	return trailModeFromTagValue(tag)
 }
 
+// PrecFromTag parses the value of a "prec" struct tag: a level, 0 if the
+// tag is empty.
+func PrecFromTag(tag string) (int, error) {
+	return precFromTagValue(tag)
+}
+
 // FirstSetOf returns the first set of a field of type T parsed with the given
 // token options (see FirstSet).
 func FirstSetOf[T any](tokOpts TokenOptions) FirstSet {
@@ -98,4 +104,56 @@ func ParseOptional[T any](s *ParserState, tokOpts TokenOptions, first FirstSet) 
 // fields matched anything.
 func EmptyMatchError(s *ParserState, ruleName string) *ParseError {
 	return emptyMatchError(s, ruleName)
+}
+
+// AlternativesOf returns the alternatives of the OneOf rule type T, by
+// field, for Choice.Try.
+func AlternativesOf[T any]() []Alternative {
+	def, err := getRuleDef(reflect.TypeFor[T]())
+	if err != nil {
+		panic(err)
+	}
+	if def.alts == nil {
+		return make([]Alternative, len(def.Fields))
+	}
+	return def.alts
+}
+
+// ParseAlternative parses an alternative of a OneOf rule into a new T, after
+// Choice.Try said to; on failure the stream is restored.
+func ParseAlternative[T any](s *ParserState, c *Choice, alt Alternative, tokOpts TokenOptions) (*T, *ParseError) {
+	start := s.Save()
+	item := new(T)
+	c.Enter(alt)
+	err := ParseWithOptions(item, s, tokOpts)
+	c.Leave()
+	if err != nil {
+		s.Restore(start)
+		return nil, err
+	}
+	return item, nil
+}
+
+// CanClimb reports whether every left-recursive alternative of the OneOf
+// rule T is a Seq rule starting with T, which generated code parses by
+// precedence climbing; otherwise it falls back to seed growing.
+func CanClimb[T any]() bool {
+	for _, alt := range AlternativesOf[T]() {
+		if alt.leftRec == indirectLeftRec {
+			return false
+		}
+	}
+	return true
+}
+
+// PlainAlternatives reports whether no alternative of the OneOf rule T is
+// left recursive or has a precedence, so that generated code can try them
+// without a Choice.
+func PlainAlternatives[T any]() bool {
+	for _, alt := range AlternativesOf[T]() {
+		if alt.leftRec != notLeftRec || alt.prec != 0 {
+			return false
+		}
+	}
+	return true
 }

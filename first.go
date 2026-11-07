@@ -1,10 +1,6 @@
 package grammar
 
-import (
-	"reflect"
-	"sync"
-	"sync/atomic"
-)
+import "reflect"
 
 // A FirstSet describes the tokens a rule can start with.  A OneOf uses the
 // first sets of its alternatives to skip, without allocating or parsing them,
@@ -100,26 +96,15 @@ func (f FirstSet) isEmpty() bool {
 	return !f.any && !f.nullable && len(f.opts) == 0 && len(f.drop) == 0
 }
 
-// alternatives is implemented by the OneOfN rules (and promoted to the structs
-// embedding them).
-type alternatives interface {
-	alternativeTypes() []reflect.Type
-}
-
 var (
-	alternativesType = reflect.TypeFor[alternatives]()
-	simpleTokenType  = reflect.TypeFor[SimpleToken]()
-	matchType        = reflect.TypeFor[Match]()
-	emptyType        = reflect.TypeFor[Empty]()
-	tokType          = reflect.TypeFor[Tok]()
+	simpleTokenType = reflect.TypeFor[SimpleToken]()
+	matchType       = reflect.TypeFor[Match]()
+	emptyType       = reflect.TypeFor[Empty]()
+	tokType         = reflect.TypeFor[Tok]()
 )
 
 // firstSets caches the first set of each rule type once computed.
 var firstSets atomicMap[reflect.Type, FirstSet]
-
-// oneOfFirsts caches, for each OneOfN type, the first sets of its
-// alternatives.
-var oneOfFirsts atomicMap[reflect.Type, []FirstSet]
 
 // firstOfType returns the first set of the rule type t.
 func firstOfType(t reflect.Type) FirstSet {
@@ -143,31 +128,6 @@ func firstOfField(t reflect.Type, opts TokenOptions, firstOf func(reflect.Type) 
 		return FirstSet{opts: opts.TokenParseOptions}
 	}
 	return firstOf(t)
-}
-
-// alternativeFirsts returns the first sets of the alternatives of a OneOfN
-// rule.
-func alternativeFirsts(o alternatives) []FirstSet {
-	t := reflect.TypeOf(o)
-	if firsts, ok := oneOfFirsts.load(t); ok {
-		return firsts
-	}
-	alts := o.alternativeTypes()
-	firsts := make([]FirstSet, len(alts))
-	for i, alt := range alts {
-		firsts[i] = firstOfType(alt)
-	}
-	oneOfFirsts.store(t, firsts)
-	return firsts
-}
-
-// alternativeTypesOf returns the alternatives of t if it is a OneOfN rule or
-// embeds one.
-func alternativeTypesOf(t reflect.Type) ([]reflect.Type, bool) {
-	if t.Kind() != reflect.Struct || !reflect.PointerTo(t).Implements(alternativesType) {
-		return nil, false
-	}
-	return reflect.New(t).Interface().(alternatives).alternativeTypes(), true
 }
 
 // A ruleBuilder builds the rule definitions and first sets of all the types
@@ -218,10 +178,10 @@ func (b *ruleBuilder) computeFirst(t reflect.Type, firstOf func(reflect.Type) Fi
 	case simpleTokenType, matchType, tokType, emptyType:
 		return nullableFirst // with no options to match, these consume nothing
 	}
-	if alts, ok := alternativeTypesOf(t); ok {
-		var res FirstSet
-		for _, alt := range alts {
-			res = res.union(firstOf(alt))
+	if alts, opts, ok := sumAlternatives(t); ok {
+		res := FirstSet{drop: sumDrop(t).TokenParseOptions}
+		for i, alt := range alts {
+			res = res.union(firstOfField(alt, opts[i], firstOf))
 		}
 		return res
 	}
@@ -236,10 +196,16 @@ func (b *ruleBuilder) computeFirst(t reflect.Type, firstOf func(reflect.Type) Fi
 		}
 		return res
 	}
-	// A Seq (or Tok rule): the fields that may consume nothing let the next
-	// one start the rule too; a lookahead (no-consume) field constrains the
-	// first token without consuming it, so it ends the walk as well.
-	for _, f := range def.Fields {
+	return seqFirst(def, 0, firstOf)
+}
+
+// seqFirst is the first set of the fields of a Seq (or Tok rule) from index
+// from: the fields that may consume nothing let the next one start the rule
+// too; a lookahead (no-consume) field constrains the first token without
+// consuming it, so it ends the walk as well.
+func seqFirst(def *RuleDef, from int, firstOf func(reflect.Type) FirstSet) FirstSet {
+	res := FirstSet{drop: def.DropOptions.TokenParseOptions}
+	for _, f := range def.Fields[from:] {
 		first := firstOfField(f.BaseType, f.TokenOptions, firstOf)
 		res = res.union(FirstSet{any: first.any, opts: first.opts, drop: first.drop})
 		switch {
@@ -255,8 +221,8 @@ func (b *ruleBuilder) computeFirst(t reflect.Type, firstOf func(reflect.Type) Fi
 // build builds the definitions and first sets of root and of all the rule
 // types reachable from it that are not cached yet.  The first sets are the
 // least fixpoint of computeFirst over those types (so recursion, left or
-// not, is fine); they then fill in the field first sets of the definitions,
-// and everything is published.
+// not, is fine); they then fill in the field first sets and the alternatives
+// of the definitions, and everything is published.
 func (b *ruleBuilder) build(root reflect.Type) {
 	env := map[reflect.Type]FirstSet{}
 	var unknown []reflect.Type
@@ -276,6 +242,7 @@ func (b *ruleBuilder) build(root reflect.Type) {
 		}
 	}
 	visit(root)
+	b.def(root) // so that it is cached even if it is not a struct rule
 	lookup := func(t reflect.Type) FirstSet { return env[t] }
 	for changed := true; changed; {
 		changed = false
@@ -295,7 +262,7 @@ func (b *ruleBuilder) build(root reflect.Type) {
 		env[t] = f
 		b.firsts[t] = f
 	}
-	for _, d := range b.defs {
+	for t, d := range b.defs {
 		if d.err != nil {
 			continue
 		}
@@ -303,55 +270,12 @@ func (b *ruleBuilder) build(root reflect.Type) {
 		for i, f := range d.ruleDef.Fields {
 			d.ruleDef.firsts[i] = firstOfField(f.BaseType, f.TokenOptions, lookup)
 		}
+		if d.ruleDef.OneOf {
+			b.alternatives(t, d.ruleDef, lookup)
+		}
 	}
 	// First sets before definitions: a definition found in the cache has its
 	// type's first set there too.
 	firstSets.storeAll(b.firsts)
 	ruleDefs.storeAll(b.defs)
-}
-
-// atomicMap is a map that is safe for concurrent use and as cheap to read as
-// a plain map, for caches that are written to a few times and read a lot: a
-// write copies the map.
-type atomicMap[K comparable, V any] struct {
-	mu sync.Mutex
-	m  atomic.Pointer[map[K]V]
-}
-
-func (a *atomicMap[K, V]) load(k K) (V, bool) {
-	m := a.m.Load()
-	if m == nil {
-		var zero V
-		return zero, false
-	}
-	v, ok := (*m)[k]
-	return v, ok
-}
-
-func (a *atomicMap[K, V]) store(k K, v V) {
-	a.storeAll(map[K]V{k: v})
-}
-
-// storeAll adds the entries of kvs, in one copy of the map.  An entry already
-// present is kept, so that concurrent builders of the same (immutable) values
-// agree on which one is published.
-func (a *atomicMap[K, V]) storeAll(kvs map[K]V) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	old := a.m.Load()
-	var m map[K]V
-	if old == nil {
-		m = make(map[K]V, len(kvs))
-	} else {
-		m = make(map[K]V, len(*old)+len(kvs))
-		for k, v := range *old {
-			m[k] = v
-		}
-	}
-	for k, v := range kvs {
-		if _, present := m[k]; !present {
-			m[k] = v
-		}
-	}
-	a.m.Store(&m)
 }

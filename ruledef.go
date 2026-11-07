@@ -13,7 +13,12 @@ type RuleDef struct {
 	OneOf       bool
 	DropOptions TokenOptions
 	Fields      []RuleField
-	firsts      []FirstSet // of the fields, filled by computeFirstSets
+	firsts      []FirstSet    // of the fields, filled by ruleBuilder.build
+	alts        []Alternative // of a OneOf: by field, filled by ruleBuilder.alternatives
+	// Prec is the level of the prec tag on the Seq or OneOf field (0 if
+	// none): the precedence of an operator rule, or the default level of
+	// the alternatives of a OneOf.  See prec.go.
+	Prec int
 }
 
 type RuleField struct {
@@ -64,6 +69,7 @@ type RepeatOptions struct {
 	Trail TrailMode
 	Drop  TokenOptions // tokens to skip before each item and separator
 	First FirstSet     // of an item
+	Prec  Bound        // precedence bound for each item
 }
 
 // RepeatOptions returns the repeat options of the field, with the given drop
@@ -228,9 +234,14 @@ func calcRuleDef(tp reflect.Type) (*RuleDef, error) {
 	seq := field0.Type == reflect.TypeOf(Seq{})
 	tok := field0.Type == reflect.TypeOf(Tok{})
 	var dropOptions TokenOptions
+	var prec int
 	if oneOf || seq {
 		firstFieldIndex++
 		dropOptions = tokenOptionsFromTagValue(field0.Tag.Get("drop"))
+		var err error
+		if prec, err = precFromTagValue(field0.Tag.Get("prec")); err != nil {
+			return nil, fmt.Errorf("rule type %s: %w", tp, err)
+		}
 	} else if tok {
 		if numField > 1 {
 			return nil, fmt.Errorf("Tok rule type %s must have exactly one field", tp)
@@ -257,6 +268,9 @@ func calcRuleDef(tp reflect.Type) (*RuleDef, error) {
 			Trail:        trail,
 			Name:         field.Name,
 			Index:        fieldIndex,
+		}
+		if _, ok := field.Tag.Lookup("prec"); ok {
+			return nil, fmt.Errorf("field %s of rule type %s: a prec tag goes on the Seq field of an operator rule", field.Name, tp)
 		}
 		if trail != TrailNone && len(ruleField.SepOptions.TokenParseOptions) == 0 {
 			return nil, fmt.Errorf("field %s of rule type %s: %w", field.Name, tp, errTrailWithoutSep)
@@ -287,6 +301,7 @@ func calcRuleDef(tp reflect.Type) (*RuleDef, error) {
 		OneOf:       oneOf,
 		Fields:      ruleFields,
 		DropOptions: dropOptions,
+		Prec:        prec,
 	}, nil
 }
 
