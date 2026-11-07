@@ -14,7 +14,7 @@ var (
 // does what grammar.Seq.Parse does.
 func (r *Additive) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err *grammar.ParseError) {
 	itemCount := 0
-	pending := s.TakePendingOr(7, true)
+	pending := s.TakePendingOr(7)
 	// First Expr
 	if s.Debug() {
 		s.Logf("  .First tok #%d", s.Save())
@@ -72,7 +72,7 @@ var (
 // does what grammar.Seq.Parse does.
 func (r *AdditiveTerm) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err *grammar.ParseError) {
 	itemCount := 0
-	pending := s.TakePendingOr(7, true)
+	pending := s.TakePendingOr(7)
 	// Op Token
 	if s.Debug() {
 		s.Logf("  .Op tok #%d", s.Save())
@@ -105,7 +105,7 @@ var (
 // does what grammar.Seq.Parse does.
 func (r *And) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err *grammar.ParseError) {
 	itemCount := 0
-	pending := s.TakePendingOr(2, true)
+	pending := s.TakePendingOr(2)
 	// First Expr
 	if s.Debug() {
 		s.Logf("  .First tok #%d", s.Save())
@@ -163,7 +163,7 @@ var (
 // does what grammar.Seq.Parse does.
 func (r *AndTerm) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err *grammar.ParseError) {
 	itemCount := 0
-	pending := s.TakePendingOr(2, true)
+	pending := s.TakePendingOr(2)
 	// And grammar.Match
 	if s.Debug() {
 		s.Logf("  .And tok #%d", s.Save())
@@ -189,7 +189,7 @@ func (r *AndTerm) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (
 }
 
 var (
-	_Atom_lr             = grammar.LeftRecursionOf[Atom]()
+	_Atom_alts           = grammar.AlternativesOf[Atom]()
 	_Atom_plain          = grammar.PlainAlternatives[Atom]()
 	_Atom_Literal_first  = grammar.FirstSetOf[Literal](grammar.TokenOptions{})
 	_Atom_Param_tok      = grammar.TokenOptionsFromTag("param")
@@ -278,84 +278,83 @@ func (r *Atom) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err
 // parseGeneral is Parse for when an alternative is left recursive or has a
 // precedence.
 func (r *Atom) parseGeneral(s *grammar.ParserState) (err *grammar.ParseError) {
-	a := grammar.AlternativesOf[Atom](s)
-	defer a.Done()
+	c := grammar.ChoiceOf[Atom](s)
 	// Literal *Literal
-	if ok, tryErr := a.Try(_Atom_lr[0], _Atom_Literal_first); !ok {
+	if ok, tryErr := c.Try(_Atom_alts[0]); !ok {
 		err = err.Merge(tryErr)
-	} else if item, fieldErr := grammar.ParseAlternative[Literal](s, &a, _Atom_lr[0], grammar.TokenOptions{}); fieldErr == nil {
+	} else if item, fieldErr := grammar.ParseAlternative[Literal](s, &c, _Atom_alts[0], grammar.TokenOptions{}); fieldErr == nil {
 		r.Literal = item
 		return nil
 	} else {
 		err = err.Merge(fieldErr)
 	}
 	// Param *Token
-	if ok, tryErr := a.Try(_Atom_lr[1], _Atom_Param_first); !ok {
+	if ok, tryErr := c.Try(_Atom_alts[1]); !ok {
 		err = err.Merge(tryErr)
-	} else if item, fieldErr := grammar.ParseAlternative[Token](s, &a, _Atom_lr[1], _Atom_Param_tok); fieldErr == nil {
+	} else if item, fieldErr := grammar.ParseAlternative[Token](s, &c, _Atom_alts[1], _Atom_Param_tok); fieldErr == nil {
 		r.Param = item
 		return nil
 	} else {
 		err = err.Merge(fieldErr)
 	}
 	// Cast *CastExpr
-	if ok, tryErr := a.Try(_Atom_lr[2], _Atom_Cast_first); !ok {
+	if ok, tryErr := c.Try(_Atom_alts[2]); !ok {
 		err = err.Merge(tryErr)
-	} else if item, fieldErr := grammar.ParseAlternative[CastExpr](s, &a, _Atom_lr[2], grammar.TokenOptions{}); fieldErr == nil {
+	} else if item, fieldErr := grammar.ParseAlternative[CastExpr](s, &c, _Atom_alts[2], grammar.TokenOptions{}); fieldErr == nil {
 		r.Cast = item
 		return nil
 	} else {
 		err = err.Merge(fieldErr)
 	}
 	// Case *CaseExpr
-	if ok, tryErr := a.Try(_Atom_lr[3], _Atom_Case_first); !ok {
+	if ok, tryErr := c.Try(_Atom_alts[3]); !ok {
 		err = err.Merge(tryErr)
-	} else if item, fieldErr := grammar.ParseAlternative[CaseExpr](s, &a, _Atom_lr[3], grammar.TokenOptions{}); fieldErr == nil {
+	} else if item, fieldErr := grammar.ParseAlternative[CaseExpr](s, &c, _Atom_alts[3], grammar.TokenOptions{}); fieldErr == nil {
 		r.Case = item
 		return nil
 	} else {
 		err = err.Merge(fieldErr)
 	}
 	// Exists *ExistsExpr
-	if ok, tryErr := a.Try(_Atom_lr[4], _Atom_Exists_first); !ok {
+	if ok, tryErr := c.Try(_Atom_alts[4]); !ok {
 		err = err.Merge(tryErr)
-	} else if item, fieldErr := grammar.ParseAlternative[ExistsExpr](s, &a, _Atom_lr[4], grammar.TokenOptions{}); fieldErr == nil {
+	} else if item, fieldErr := grammar.ParseAlternative[ExistsExpr](s, &c, _Atom_alts[4], grammar.TokenOptions{}); fieldErr == nil {
 		r.Exists = item
 		return nil
 	} else {
 		err = err.Merge(fieldErr)
 	}
 	// Func *FuncCall
-	if ok, tryErr := a.Try(_Atom_lr[5], _Atom_Func_first); !ok {
+	if ok, tryErr := c.Try(_Atom_alts[5]); !ok {
 		err = err.Merge(tryErr)
-	} else if item, fieldErr := grammar.ParseAlternative[FuncCall](s, &a, _Atom_lr[5], grammar.TokenOptions{}); fieldErr == nil {
+	} else if item, fieldErr := grammar.ParseAlternative[FuncCall](s, &c, _Atom_alts[5], grammar.TokenOptions{}); fieldErr == nil {
 		r.Func = item
 		return nil
 	} else {
 		err = err.Merge(fieldErr)
 	}
 	// Column *ColumnRef
-	if ok, tryErr := a.Try(_Atom_lr[6], _Atom_Column_first); !ok {
+	if ok, tryErr := c.Try(_Atom_alts[6]); !ok {
 		err = err.Merge(tryErr)
-	} else if item, fieldErr := grammar.ParseAlternative[ColumnRef](s, &a, _Atom_lr[6], grammar.TokenOptions{}); fieldErr == nil {
+	} else if item, fieldErr := grammar.ParseAlternative[ColumnRef](s, &c, _Atom_alts[6], grammar.TokenOptions{}); fieldErr == nil {
 		r.Column = item
 		return nil
 	} else {
 		err = err.Merge(fieldErr)
 	}
 	// Subquery *ParenSelect
-	if ok, tryErr := a.Try(_Atom_lr[7], _Atom_Subquery_first); !ok {
+	if ok, tryErr := c.Try(_Atom_alts[7]); !ok {
 		err = err.Merge(tryErr)
-	} else if item, fieldErr := grammar.ParseAlternative[ParenSelect](s, &a, _Atom_lr[7], grammar.TokenOptions{}); fieldErr == nil {
+	} else if item, fieldErr := grammar.ParseAlternative[ParenSelect](s, &c, _Atom_alts[7], grammar.TokenOptions{}); fieldErr == nil {
 		r.Subquery = item
 		return nil
 	} else {
 		err = err.Merge(fieldErr)
 	}
 	// Paren *ParenExprs
-	if ok, tryErr := a.Try(_Atom_lr[8], _Atom_Paren_first); !ok {
+	if ok, tryErr := c.Try(_Atom_alts[8]); !ok {
 		err = err.Merge(tryErr)
-	} else if item, fieldErr := grammar.ParseAlternative[ParenExprs](s, &a, _Atom_lr[8], grammar.TokenOptions{}); fieldErr == nil {
+	} else if item, fieldErr := grammar.ParseAlternative[ParenExprs](s, &c, _Atom_alts[8], grammar.TokenOptions{}); fieldErr == nil {
 		r.Paren = item
 		return nil
 	} else {
@@ -494,7 +493,7 @@ var (
 // does what grammar.Seq.Parse does.
 func (r *BitwiseBinary) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err *grammar.ParseError) {
 	itemCount := 0
-	pending := s.TakePendingOr(6, true)
+	pending := s.TakePendingOr(6)
 	// First Expr
 	if s.Debug() {
 		s.Logf("  .First tok #%d", s.Save())
@@ -552,7 +551,7 @@ var (
 // does what grammar.Seq.Parse does.
 func (r *BitwiseComplement) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err *grammar.ParseError) {
 	itemCount := 0
-	pending := s.TakePendingOr(10, true)
+	pending := s.TakePendingOr(10)
 	// Tilde grammar.Match
 	if s.Debug() {
 		s.Logf("  .Tilde tok #%d", s.Save())
@@ -585,7 +584,7 @@ var (
 // does what grammar.Seq.Parse does.
 func (r *BitwiseTerm) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err *grammar.ParseError) {
 	itemCount := 0
-	pending := s.TakePendingOr(6, true)
+	pending := s.TakePendingOr(6)
 	// Op Token
 	if s.Debug() {
 		s.Logf("  .Op tok #%d", s.Save())
@@ -748,7 +747,7 @@ var (
 // does what grammar.Seq.Parse does.
 func (r *Collate) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err *grammar.ParseError) {
 	itemCount := 0
-	pending := s.TakePendingOr(11, true)
+	pending := s.TakePendingOr(11)
 	// Lhs Expr
 	if s.Debug() {
 		s.Logf("  .Lhs tok #%d", s.Save())
@@ -841,7 +840,7 @@ var (
 // does what grammar.Seq.Parse does.
 func (r *Concatenation) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err *grammar.ParseError) {
 	itemCount := 0
-	pending := s.TakePendingOr(9, true)
+	pending := s.TakePendingOr(9)
 	// First Expr
 	if s.Debug() {
 		s.Logf("  .First tok #%d", s.Save())
@@ -899,7 +898,7 @@ var (
 // does what grammar.Seq.Parse does.
 func (r *ConcatenationTerm) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err *grammar.ParseError) {
 	itemCount := 0
-	pending := s.TakePendingOr(9, true)
+	pending := s.TakePendingOr(9)
 	// Op Token
 	if s.Debug() {
 		s.Logf("  .Op tok #%d", s.Save())
@@ -1057,7 +1056,7 @@ var (
 // does what grammar.Seq.Parse does.
 func (r *EscapeClause) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err *grammar.ParseError) {
 	itemCount := 0
-	pending := s.TakePendingOr(4, true)
+	pending := s.TakePendingOr(4)
 	// Escape grammar.Match
 	if s.Debug() {
 		s.Logf("  .Escape tok #%d", s.Save())
@@ -1493,7 +1492,7 @@ func (r *InList) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (e
 }
 
 var (
-	_InTarget_lr             = grammar.LeftRecursionOf[InTarget]()
+	_InTarget_alts           = grammar.AlternativesOf[InTarget]()
 	_InTarget_plain          = grammar.PlainAlternatives[InTarget]()
 	_InTarget_Subquery_first = grammar.FirstSetOf[ParenSelect](grammar.TokenOptions{})
 	_InTarget_List_first     = grammar.FirstSetOf[InList](grammar.TokenOptions{})
@@ -1533,30 +1532,29 @@ func (r *InTarget) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) 
 // parseGeneral is Parse for when an alternative is left recursive or has a
 // precedence.
 func (r *InTarget) parseGeneral(s *grammar.ParserState) (err *grammar.ParseError) {
-	a := grammar.AlternativesOf[InTarget](s)
-	defer a.Done()
+	c := grammar.ChoiceOf[InTarget](s)
 	// Subquery *ParenSelect
-	if ok, tryErr := a.Try(_InTarget_lr[0], _InTarget_Subquery_first); !ok {
+	if ok, tryErr := c.Try(_InTarget_alts[0]); !ok {
 		err = err.Merge(tryErr)
-	} else if item, fieldErr := grammar.ParseAlternative[ParenSelect](s, &a, _InTarget_lr[0], grammar.TokenOptions{}); fieldErr == nil {
+	} else if item, fieldErr := grammar.ParseAlternative[ParenSelect](s, &c, _InTarget_alts[0], grammar.TokenOptions{}); fieldErr == nil {
 		r.Subquery = item
 		return nil
 	} else {
 		err = err.Merge(fieldErr)
 	}
 	// List *InList
-	if ok, tryErr := a.Try(_InTarget_lr[1], _InTarget_List_first); !ok {
+	if ok, tryErr := c.Try(_InTarget_alts[1]); !ok {
 		err = err.Merge(tryErr)
-	} else if item, fieldErr := grammar.ParseAlternative[InList](s, &a, _InTarget_lr[1], grammar.TokenOptions{}); fieldErr == nil {
+	} else if item, fieldErr := grammar.ParseAlternative[InList](s, &c, _InTarget_alts[1], grammar.TokenOptions{}); fieldErr == nil {
 		r.List = item
 		return nil
 	} else {
 		err = err.Merge(fieldErr)
 	}
 	// Table *QualifiedName
-	if ok, tryErr := a.Try(_InTarget_lr[2], _InTarget_Table_first); !ok {
+	if ok, tryErr := c.Try(_InTarget_alts[2]); !ok {
 		err = err.Merge(tryErr)
-	} else if item, fieldErr := grammar.ParseAlternative[QualifiedName](s, &a, _InTarget_lr[2], grammar.TokenOptions{}); fieldErr == nil {
+	} else if item, fieldErr := grammar.ParseAlternative[QualifiedName](s, &c, _InTarget_alts[2], grammar.TokenOptions{}); fieldErr == nil {
 		r.Table = item
 		return nil
 	} else {
@@ -1689,7 +1687,7 @@ var (
 // does what grammar.Seq.Parse does.
 func (r *Multiplicative) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err *grammar.ParseError) {
 	itemCount := 0
-	pending := s.TakePendingOr(8, true)
+	pending := s.TakePendingOr(8)
 	// First Expr
 	if s.Debug() {
 		s.Logf("  .First tok #%d", s.Save())
@@ -1747,7 +1745,7 @@ var (
 // does what grammar.Seq.Parse does.
 func (r *MultiplicativeTerm) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err *grammar.ParseError) {
 	itemCount := 0
-	pending := s.TakePendingOr(8, true)
+	pending := s.TakePendingOr(8)
 	// Op Token
 	if s.Debug() {
 		s.Logf("  .Op tok #%d", s.Save())
@@ -1787,7 +1785,7 @@ var (
 // does what grammar.Seq.Parse does.
 func (r *Not) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err *grammar.ParseError) {
 	itemCount := 0
-	pending := s.TakePendingOr(3, true)
+	pending := s.TakePendingOr(3)
 	// Not grammar.Match
 	if s.Debug() {
 		s.Logf("  .Not tok #%d", s.Save())
@@ -1932,7 +1930,7 @@ var (
 // does what grammar.Seq.Parse does.
 func (r *Or) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err *grammar.ParseError) {
 	itemCount := 0
-	pending := s.TakePendingOr(1, true)
+	pending := s.TakePendingOr(1)
 	// First Expr
 	if s.Debug() {
 		s.Logf("  .First tok #%d", s.Save())
@@ -1990,7 +1988,7 @@ var (
 // does what grammar.Seq.Parse does.
 func (r *OrTerm) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err *grammar.ParseError) {
 	itemCount := 0
-	pending := s.TakePendingOr(1, true)
+	pending := s.TakePendingOr(1)
 	// Or grammar.Match
 	if s.Debug() {
 		s.Logf("  .Or tok #%d", s.Save())
@@ -2023,7 +2021,7 @@ var (
 // does what grammar.Seq.Parse does.
 func (r *Ordering) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err *grammar.ParseError) {
 	itemCount := 0
-	pending := s.TakePendingOr(5, true)
+	pending := s.TakePendingOr(5)
 	// Lhs Expr
 	if s.Debug() {
 		s.Logf("  .Lhs tok #%d", s.Save())
@@ -2337,7 +2335,7 @@ var (
 // does what grammar.Seq.Parse does.
 func (r *Sign) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err *grammar.ParseError) {
 	itemCount := 0
-	pending := s.TakePendingOr(10, true)
+	pending := s.TakePendingOr(10)
 	// Op Token
 	if s.Debug() {
 		s.Logf("  .Op tok #%d", s.Save())
@@ -2523,7 +2521,7 @@ func (r *WhenClause) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions
 }
 
 var (
-	_WindowSpec_lr         = grammar.LeftRecursionOf[WindowSpec]()
+	_WindowSpec_alts       = grammar.AlternativesOf[WindowSpec]()
 	_WindowSpec_plain      = grammar.PlainAlternatives[WindowSpec]()
 	_WindowSpec_Def_first  = grammar.FirstSetOf[WindowDef](grammar.TokenOptions{})
 	_WindowSpec_Name_first = grammar.FirstSetOf[Name](grammar.TokenOptions{})
@@ -2555,21 +2553,20 @@ func (r *WindowSpec) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions
 // parseGeneral is Parse for when an alternative is left recursive or has a
 // precedence.
 func (r *WindowSpec) parseGeneral(s *grammar.ParserState) (err *grammar.ParseError) {
-	a := grammar.AlternativesOf[WindowSpec](s)
-	defer a.Done()
+	c := grammar.ChoiceOf[WindowSpec](s)
 	// Def *WindowDef
-	if ok, tryErr := a.Try(_WindowSpec_lr[0], _WindowSpec_Def_first); !ok {
+	if ok, tryErr := c.Try(_WindowSpec_alts[0]); !ok {
 		err = err.Merge(tryErr)
-	} else if item, fieldErr := grammar.ParseAlternative[WindowDef](s, &a, _WindowSpec_lr[0], grammar.TokenOptions{}); fieldErr == nil {
+	} else if item, fieldErr := grammar.ParseAlternative[WindowDef](s, &c, _WindowSpec_alts[0], grammar.TokenOptions{}); fieldErr == nil {
 		r.Def = item
 		return nil
 	} else {
 		err = err.Merge(fieldErr)
 	}
 	// Name *Name
-	if ok, tryErr := a.Try(_WindowSpec_lr[1], _WindowSpec_Name_first); !ok {
+	if ok, tryErr := c.Try(_WindowSpec_alts[1]); !ok {
 		err = err.Merge(tryErr)
-	} else if item, fieldErr := grammar.ParseAlternative[Name](s, &a, _WindowSpec_lr[1], grammar.TokenOptions{}); fieldErr == nil {
+	} else if item, fieldErr := grammar.ParseAlternative[Name](s, &c, _WindowSpec_alts[1], grammar.TokenOptions{}); fieldErr == nil {
 		r.Name = item
 		return nil
 	} else {

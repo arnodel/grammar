@@ -7,28 +7,28 @@ package expr
 import grammar "github.com/arnodel/grammar"
 
 var (
-	_Expr_lr        = grammar.LeftRecursionOf[Expr]()
-	_Expr_direct    = grammar.DirectLeftRecursionOnly[Expr]()
+	_Expr_alts      = grammar.AlternativesOf[Expr]()
+	_Expr_climb     = grammar.CanClimb[Expr]()
 	_Expr_dispatch  = grammar.DispatchOf[Expr]()
 	_Expr_Sum_first = grammar.FirstSetOf[Sum](grammar.TokenOptions{})
 	_Expr_Num_first = grammar.FirstSetOf[Num](grammar.TokenOptions{})
 )
 
-// Parse implements grammar.Parser for Expr without reflection.  The
-// alternatives that start with Expr itself are parsed as a loop
-// extending the value parsed by the others (precedence climbing), unless
-// the rule turns out to be left recursive through other rules too.
+// Parse implements grammar.Parser for Expr without reflection, by
+// precedence climbing: the alternatives that start with Expr itself
+// extend the value parsed by the others, unless the rule turns out to be
+// left recursive through other rules too.
 func (r *Expr) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err *grammar.ParseError) {
-	if !_Expr_direct {
+	if !_Expr_climb {
 		return r.parseGrowing(s)
 	}
-	a := grammar.AlternativesOf[Expr](s)
+	c := grammar.ChoiceOf[Expr](s)
 	seeded := false
 	// Num *Num
 	if seeded {
-	} else if ok, tryErr := a.Try(_Expr_lr[1], _Expr_Num_first); !ok {
+	} else if ok, tryErr := c.Try(_Expr_alts[1]); !ok {
 		err = err.Merge(tryErr)
-	} else if item, fieldErr := grammar.ParseAlternative[Num](s, &a, _Expr_lr[1], grammar.TokenOptions{}); fieldErr == nil {
+	} else if item, fieldErr := grammar.ParseAlternative[Num](s, &c, _Expr_alts[1], grammar.TokenOptions{}); fieldErr == nil {
 		r.Num = item
 		seeded = true
 	} else {
@@ -38,7 +38,7 @@ func (r *Expr) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err
 		return err
 	}
 	for {
-		mask := _Expr_dispatch.Lookup(s.Peek(), a.Level())
+		mask := _Expr_dispatch.Lookup(s.Peek(), c.Level())
 		if mask == 0 {
 			break
 		}
@@ -47,7 +47,7 @@ func (r *Expr) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err
 			start := s.Save()
 			item := &Sum{}
 			item.Lhs = *r
-			if fieldErr := item.ParseRest(s, a.PendingFor(_Expr_lr[0])); fieldErr == nil && s.Save() > start {
+			if fieldErr := item.ParseRest(s, c.PendingFor(_Expr_alts[0])); fieldErr == nil && s.Save() > start {
 				*r = Expr{Sum: item}
 				continue
 			} else {
@@ -57,26 +57,27 @@ func (r *Expr) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err
 		}
 		break
 	}
-	_Expr_dispatch.Expect(s, a.Level())
+	_Expr_dispatch.Expect(s, c.Level())
 	return nil
 }
 
+// parseGrowing is Parse for when the rule is left recursive through other
+// rules: left recursion is resolved by seed growing in the memo.
 func (r *Expr) parseGrowing(s *grammar.ParserState) (err *grammar.ParseError) {
-	a := grammar.AlternativesOf[Expr](s)
-	defer a.Done()
+	c := grammar.ChoiceOf[Expr](s)
 	// Sum *Sum
-	if ok, tryErr := a.Try(_Expr_lr[0], _Expr_Sum_first); !ok {
+	if ok, tryErr := c.Try(_Expr_alts[0]); !ok {
 		err = err.Merge(tryErr)
-	} else if item, fieldErr := grammar.ParseAlternative[Sum](s, &a, _Expr_lr[0], grammar.TokenOptions{}); fieldErr == nil {
+	} else if item, fieldErr := grammar.ParseAlternative[Sum](s, &c, _Expr_alts[0], grammar.TokenOptions{}); fieldErr == nil {
 		r.Sum = item
 		return nil
 	} else {
 		err = err.Merge(fieldErr)
 	}
 	// Num *Num
-	if ok, tryErr := a.Try(_Expr_lr[1], _Expr_Num_first); !ok {
+	if ok, tryErr := c.Try(_Expr_alts[1]); !ok {
 		err = err.Merge(tryErr)
-	} else if item, fieldErr := grammar.ParseAlternative[Num](s, &a, _Expr_lr[1], grammar.TokenOptions{}); fieldErr == nil {
+	} else if item, fieldErr := grammar.ParseAlternative[Num](s, &c, _Expr_alts[1], grammar.TokenOptions{}); fieldErr == nil {
 		r.Num = item
 		return nil
 	} else {

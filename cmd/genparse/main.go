@@ -152,13 +152,13 @@ type Rule struct {
 	Fields     []*Field
 	GrammarPkg string
 	// For a OneOf: some alternatives are Seq rules of this file starting
-	// with this rule (see Field.LeftRec); they are parsed with a loop.
+	// with this rule (see Field.LeftRec); they are parsed by precedence
+	// climbing.
 	Loop bool
 	// For a Seq: it starts with a rule field, so it gets a ParseRest method.
 	Rest bool
-	// The prec tag of the Seq field.
-	Prec    int
-	HasPrec bool
+	// The level of the prec tag of the Seq or OneOf field, 0 if none.
+	Prec int
 }
 
 // HasVars is true if the rule needs package-level option variables.
@@ -192,9 +192,9 @@ type Field struct {
 // Rest returns the fields after the first.
 func (r *Rule) RestFields() []*Field { return r.Fields[1:] }
 
-// UsesPrec is true if parsing the rule involves precedence bounds: it has a
-// precedence or one of its fields does.
-func (r *Rule) UsesPrec() bool { return r.Kind == SeqRule && r.HasPrec }
+// UsesPrec is true if parsing the rule involves precedence bounds: it is an
+// operator rule (a Seq with a level).
+func (r *Rule) UsesPrec() bool { return r.Kind == SeqRule && r.Prec != 0 }
 
 // Value is true for a plain (non-pointer, non-slice) field.
 func (f *Field) Value() bool {
@@ -274,13 +274,14 @@ func ruleFromStruct(name string, structType *ast.StructType, grammarPkg string) 
 		return nil, nil
 	}
 	rule := &Rule{Name: name, Kind: kind, Drop: tagValue(first, "drop"), GrammarPkg: grammarPkg}
-	if precTag := tagValue(first, "prec"); precTag != "" {
-		prec, err := strconv.Atoi(precTag)
-		if err != nil || prec < 0 || kind == TokRule {
-			return nil, fmt.Errorf("rule type %s: invalid prec tag %q", name, precTag)
-		}
-		rule.Prec, rule.HasPrec = prec, true
+	prec, err := grammar.PrecFromTag(tagValue(first, "prec"))
+	if err != nil {
+		return nil, fmt.Errorf("rule type %s: %w", name, err)
 	}
+	if prec != 0 && kind == TokRule {
+		return nil, fmt.Errorf("rule type %s: a prec tag goes on a Seq or OneOf field", name)
+	}
+	rule.Prec = prec
 	if kind == TokRule {
 		if len(structType.Fields.List) > 1 {
 			return nil, fmt.Errorf("Tok rule type %s must have exactly one field", name)
@@ -471,13 +472,13 @@ var (
 	_{{ .Name }}_drop = {{ $g }}.TokenOptionsFromTag({{ quote .Drop }})
 {{- end }}
 {{- if eq .Kind 1 }}
-	_{{ .Name }}_lr = {{ $g }}.LeftRecursionOf[{{ .Name }}]()
+	_{{ .Name }}_alts = {{ $g }}.AlternativesOf[{{ .Name }}]()
 {{- if not .Loop }}
 	_{{ .Name }}_plain = {{ $g }}.PlainAlternatives[{{ .Name }}]()
 {{- end }}
 {{- end }}
 {{- if .Loop }}
-	_{{ .Name }}_direct   = {{ $g }}.DirectLeftRecursionOnly[{{ .Name }}]()
+	_{{ .Name }}_climb    = {{ $g }}.CanClimb[{{ .Name }}]()
 	_{{ .Name }}_dispatch = {{ $g }}.DispatchOf[{{ .Name }}]()
 {{- end }}
 {{- range .Fields }}
@@ -500,7 +501,7 @@ var (
 func (r *{{ .Name }}) Parse(_ any, s *{{ $g }}.ParserState, _ {{ $g }}.TokenOptions) (err *{{ $g }}.ParseError) {
 	itemCount := 0
 {{- if .UsesPrec }}
-	pending := s.TakePendingOr({{ .Prec }}, {{ .HasPrec }})
+	pending := s.TakePendingOr({{ .Prec }})
 {{- end }}
 {{- template "fields" (list $r .Fields 0 .UsesPrec) }}
 	if itemCount == 0 {
@@ -521,15 +522,15 @@ func (r *{{ .Name }}) ParseRest(s *{{ $g }}.ParserState, pending {{ $g }}.Pendin
 {{- end }}
 {{- else -}}
 {{- if .Loop }}
-// Parse implements {{ $g }}.Parser for {{ .Name }} without reflection.  The
-// alternatives that start with {{ .Name }} itself are parsed as a loop
-// extending the value parsed by the others (precedence climbing), unless
-// the rule turns out to be left recursive through other rules too.
+// Parse implements {{ $g }}.Parser for {{ .Name }} without reflection, by
+// precedence climbing: the alternatives that start with {{ .Name }} itself
+// extend the value parsed by the others, unless the rule turns out to be
+// left recursive through other rules too.
 func (r *{{ .Name }}) Parse(_ any, s *{{ $g }}.ParserState, _ {{ $g }}.TokenOptions) (err *{{ $g }}.ParseError) {
-	if !_{{ .Name }}_direct {
+	if !_{{ .Name }}_climb {
 		return r.parseGrowing(s)
 	}
-	a := {{ $g }}.AlternativesOf[{{ .Name }}](s)
+	c := {{ $g }}.ChoiceOf[{{ .Name }}](s)
 {{- if .Drop }}
 	_{{ .Name }}_drop.DropMatchingNextTokens(s)
 {{- end }}
@@ -539,9 +540,9 @@ func (r *{{ .Name }}) Parse(_ any, s *{{ $g }}.ParserState, _ {{ $g }}.TokenOpti
 	// {{ .Name }} {{ .Type }}
 {{- if .Pointer }}
 	if seeded {
-	} else if ok, tryErr := a.Try(_{{ $r.Name }}_lr[{{ $i }}], _{{ $r.Name }}_{{ .Name }}_first); !ok {
+	} else if ok, tryErr := c.Try(_{{ $r.Name }}_alts[{{ $i }}]); !ok {
 		err = err.Merge(tryErr)
-	} else if item, fieldErr := {{ $g }}.ParseAlternative[{{ .BaseType }}](s, &a, _{{ $r.Name }}_lr[{{ $i }}], {{ template "tok" (list $r .) }}); fieldErr == nil {
+	} else if item, fieldErr := {{ $g }}.ParseAlternative[{{ .BaseType }}](s, &c, _{{ $r.Name }}_alts[{{ $i }}], {{ template "tok" (list $r .) }}); fieldErr == nil {
 		r.{{ .Name }} = item
 		seeded = true
 	} else {
@@ -549,7 +550,7 @@ func (r *{{ .Name }}) Parse(_ any, s *{{ $g }}.ParserState, _ {{ $g }}.TokenOpti
 	}
 {{- else }}
 	if seeded {
-	} else if ok, tryErr := a.Try(_{{ $r.Name }}_lr[{{ $i }}], _{{ $r.Name }}_{{ .Name }}_rep.First); !ok {
+	} else if ok, tryErr := c.Try(_{{ $r.Name }}_alts[{{ $i }}]); !ok {
 		err = err.Merge(tryErr)
 	} else if items, n, fieldErr, ok := {{ $g }}.ParseRepeated[{{ .BaseType }}](s, {{ template "tok" (list $r .) }}, _{{ $r.Name }}_{{ .Name }}_rep); ok && n > 0 {
 		r.{{ .Name }} = items
@@ -564,7 +565,7 @@ func (r *{{ .Name }}) Parse(_ any, s *{{ $g }}.ParserState, _ {{ $g }}.TokenOpti
 		return err
 	}
 	for {
-		mask := _{{ .Name }}_dispatch.Lookup(s.Peek(), a.Level())
+		mask := _{{ .Name }}_dispatch.Lookup(s.Peek(), c.Level())
 		if mask == 0 {
 			break
 		}
@@ -575,7 +576,7 @@ func (r *{{ .Name }}) Parse(_ any, s *{{ $g }}.ParserState, _ {{ $g }}.TokenOpti
 			start := s.Save()
 			item := &{{ .BaseType }}{}
 			item.{{ .LeftField }} = *r
-			if fieldErr := item.ParseRest(s, a.PendingFor(_{{ $r.Name }}_lr[{{ $i }}])); fieldErr == nil && s.Save() > start {
+			if fieldErr := item.ParseRest(s, c.PendingFor(_{{ $r.Name }}_alts[{{ $i }}])); fieldErr == nil && s.Save() > start {
 				*r = {{ $r.Name }}{ {{ .Name }}: item}
 				continue
 			} else {
@@ -587,13 +588,14 @@ func (r *{{ .Name }}) Parse(_ any, s *{{ $g }}.ParserState, _ {{ $g }}.TokenOpti
 {{- end }}
 		break
 	}
-	_{{ .Name }}_dispatch.Expect(s, a.Level())
+	_{{ .Name }}_dispatch.Expect(s, c.Level())
 	return nil
 }
 
+// parseGrowing is Parse for when the rule is left recursive through other
+// rules: left recursion is resolved by seed growing in the memo.
 func (r *{{ .Name }}) parseGrowing(s *{{ $g }}.ParserState) (err *{{ $g }}.ParseError) {
-	a := {{ $g }}.AlternativesOf[{{ .Name }}](s)
-	defer a.Done()
+	c := {{ $g }}.ChoiceOf[{{ .Name }}](s)
 {{- else }}
 // Parse implements {{ $g }}.Parser for {{ .Name }} without reflection; it
 // does what {{ $g }}.OneOf.Parse does.
@@ -628,8 +630,7 @@ func (r *{{ .Name }}) Parse(_ any, s *{{ $g }}.ParserState, _ {{ $g }}.TokenOpti
 // parseGeneral is Parse for when an alternative is left recursive or has a
 // precedence.
 func (r *{{ .Name }}) parseGeneral(s *{{ $g }}.ParserState) (err *{{ $g }}.ParseError) {
-	a := {{ $g }}.AlternativesOf[{{ .Name }}](s)
-	defer a.Done()
+	c := {{ $g }}.ChoiceOf[{{ .Name }}](s)
 {{- end }}
 {{- if .Drop }}
 	_{{ .Name }}_drop.DropMatchingNextTokens(s)
@@ -637,16 +638,16 @@ func (r *{{ .Name }}) parseGeneral(s *{{ $g }}.ParserState) (err *{{ $g }}.Parse
 {{- range $i, $f := .Fields }}
 	// {{ .Name }} {{ .Type }}
 {{- if .Pointer }}
-	if ok, tryErr := a.Try(_{{ $r.Name }}_lr[{{ $i }}], _{{ $r.Name }}_{{ .Name }}_first); !ok {
+	if ok, tryErr := c.Try(_{{ $r.Name }}_alts[{{ $i }}]); !ok {
 		err = err.Merge(tryErr)
-	} else if item, fieldErr := {{ $g }}.ParseAlternative[{{ .BaseType }}](s, &a, _{{ $r.Name }}_lr[{{ $i }}], {{ template "tok" (list $r .) }}); fieldErr == nil {
+	} else if item, fieldErr := {{ $g }}.ParseAlternative[{{ .BaseType }}](s, &c, _{{ $r.Name }}_alts[{{ $i }}], {{ template "tok" (list $r .) }}); fieldErr == nil {
 		r.{{ .Name }} = item
 		return nil
 	} else {
 		err = err.Merge(fieldErr)
 	}
 {{- else }}
-	if ok, tryErr := a.Try(_{{ $r.Name }}_lr[{{ $i }}], _{{ $r.Name }}_{{ .Name }}_rep.First); !ok {
+	if ok, tryErr := c.Try(_{{ $r.Name }}_alts[{{ $i }}]); !ok {
 		err = err.Merge(tryErr)
 	} else if items, n, fieldErr, ok := {{ $g }}.ParseRepeated[{{ .BaseType }}](s, {{ template "tok" (list $r .) }}, _{{ $r.Name }}_{{ .Name }}_rep); ok && n > 0 {
 		r.{{ .Name }} = items

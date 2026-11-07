@@ -13,12 +13,12 @@ type RuleDef struct {
 	OneOf       bool
 	DropOptions TokenOptions
 	Fields      []RuleField
-	firsts      []FirstSet    // of the fields, filled by computeFirstSets
-	leftRec     []LeftRecInfo // for a OneOf: by field, see leftRecursion
-	// The prec tag of the Seq or OneOf field: the precedence of an operator
-	// rule, or the default precedence of the alternatives of a OneOf.
-	Prec    int
-	HasPrec bool
+	firsts      []FirstSet    // of the fields, filled by ruleBuilder.build
+	alts        []Alternative // of a OneOf: by field, filled by ruleBuilder.alternatives
+	// Prec is the level of the prec tag on the Seq or OneOf field (0 if
+	// none): the precedence of an operator rule, or the default level of
+	// the alternatives of a OneOf.  See prec.go.
+	Prec int
 }
 
 type RuleField struct {
@@ -235,16 +235,12 @@ func calcRuleDef(tp reflect.Type) (*RuleDef, error) {
 	tok := field0.Type == reflect.TypeOf(Tok{})
 	var dropOptions TokenOptions
 	var prec int
-	var hasPrec bool
 	if oneOf || seq {
 		firstFieldIndex++
 		dropOptions = tokenOptionsFromTagValue(field0.Tag.Get("drop"))
-		if precTag, ok := field0.Tag.Lookup("prec"); ok {
-			p, err := strconv.Atoi(precTag)
-			if err != nil || p < 0 {
-				return nil, fmt.Errorf("rule type %s: invalid prec tag %q", tp, precTag)
-			}
-			prec, hasPrec = p, true
+		var err error
+		if prec, err = precFromTagValue(field0.Tag.Get("prec")); err != nil {
+			return nil, fmt.Errorf("rule type %s: %w", tp, err)
 		}
 	} else if tok {
 		if numField > 1 {
@@ -306,7 +302,6 @@ func calcRuleDef(tp reflect.Type) (*RuleDef, error) {
 		Fields:      ruleFields,
 		DropOptions: dropOptions,
 		Prec:        prec,
-		HasPrec:     hasPrec,
 	}, nil
 }
 

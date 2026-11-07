@@ -132,3 +132,36 @@ func TestPrecedenceGroupOperand(t *testing.T) {
 	var e pgExpr
 	Parse(&e, toks)
 }
+
+// Operators grouped in a OneOf that is an alternative of a plain OneOf
+// rule: the group would be parsed without the bound, so it is a definition
+// error; groups go in a Sum, which flattens them.
+type pnExpr struct {
+	OneOf
+	Logical *pnLogical
+	Name    *pfName
+}
+
+type pnLogical struct {
+	OneOf
+	Or *pnOr
+}
+
+type pnOr struct {
+	Seq `prec:"1"`
+	Lhs pnExpr
+	Op  Match `tok:"op,|"`
+	Rhs pnExpr
+}
+
+func TestPrecedenceGroupInOneOf(t *testing.T) {
+	defer func() {
+		r := recover()
+		if r == nil || !strings.Contains(r.(string), "grammar.Sum") {
+			t.Errorf("expected a definition error, got %v", r)
+		}
+	}()
+	toks, _ := pfTokenise(`a | b`)
+	var e pnExpr
+	Parse(&e, toks)
+}

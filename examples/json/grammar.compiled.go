@@ -179,7 +179,7 @@ func (r *DictItem) ParseRest(s *grammar.ParserState, pending grammar.PendingPrec
 }
 
 var (
-	_Json_lr           = grammar.LeftRecursionOf[Json]()
+	_Json_alts         = grammar.AlternativesOf[Json]()
 	_Json_plain        = grammar.PlainAlternatives[Json]()
 	_Json_Number_first = grammar.FirstSetOf[Number](grammar.TokenOptions{})
 	_Json_String_first = grammar.FirstSetOf[String](grammar.TokenOptions{})
@@ -243,57 +243,56 @@ func (r *Json) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err
 // parseGeneral is Parse for when an alternative is left recursive or has a
 // precedence.
 func (r *Json) parseGeneral(s *grammar.ParserState) (err *grammar.ParseError) {
-	a := grammar.AlternativesOf[Json](s)
-	defer a.Done()
+	c := grammar.ChoiceOf[Json](s)
 	// Number *Number
-	if ok, tryErr := a.Try(_Json_lr[0], _Json_Number_first); !ok {
+	if ok, tryErr := c.Try(_Json_alts[0]); !ok {
 		err = err.Merge(tryErr)
-	} else if item, fieldErr := grammar.ParseAlternative[Number](s, &a, _Json_lr[0], grammar.TokenOptions{}); fieldErr == nil {
+	} else if item, fieldErr := grammar.ParseAlternative[Number](s, &c, _Json_alts[0], grammar.TokenOptions{}); fieldErr == nil {
 		r.Number = item
 		return nil
 	} else {
 		err = err.Merge(fieldErr)
 	}
 	// String *String
-	if ok, tryErr := a.Try(_Json_lr[1], _Json_String_first); !ok {
+	if ok, tryErr := c.Try(_Json_alts[1]); !ok {
 		err = err.Merge(tryErr)
-	} else if item, fieldErr := grammar.ParseAlternative[String](s, &a, _Json_lr[1], grammar.TokenOptions{}); fieldErr == nil {
+	} else if item, fieldErr := grammar.ParseAlternative[String](s, &c, _Json_alts[1], grammar.TokenOptions{}); fieldErr == nil {
 		r.String = item
 		return nil
 	} else {
 		err = err.Merge(fieldErr)
 	}
 	// Null *Null
-	if ok, tryErr := a.Try(_Json_lr[2], _Json_Null_first); !ok {
+	if ok, tryErr := c.Try(_Json_alts[2]); !ok {
 		err = err.Merge(tryErr)
-	} else if item, fieldErr := grammar.ParseAlternative[Null](s, &a, _Json_lr[2], grammar.TokenOptions{}); fieldErr == nil {
+	} else if item, fieldErr := grammar.ParseAlternative[Null](s, &c, _Json_alts[2], grammar.TokenOptions{}); fieldErr == nil {
 		r.Null = item
 		return nil
 	} else {
 		err = err.Merge(fieldErr)
 	}
 	// Bool *Bool
-	if ok, tryErr := a.Try(_Json_lr[3], _Json_Bool_first); !ok {
+	if ok, tryErr := c.Try(_Json_alts[3]); !ok {
 		err = err.Merge(tryErr)
-	} else if item, fieldErr := grammar.ParseAlternative[Bool](s, &a, _Json_lr[3], grammar.TokenOptions{}); fieldErr == nil {
+	} else if item, fieldErr := grammar.ParseAlternative[Bool](s, &c, _Json_alts[3], grammar.TokenOptions{}); fieldErr == nil {
 		r.Bool = item
 		return nil
 	} else {
 		err = err.Merge(fieldErr)
 	}
 	// Array *Array
-	if ok, tryErr := a.Try(_Json_lr[4], _Json_Array_first); !ok {
+	if ok, tryErr := c.Try(_Json_alts[4]); !ok {
 		err = err.Merge(tryErr)
-	} else if item, fieldErr := grammar.ParseAlternative[Array](s, &a, _Json_lr[4], grammar.TokenOptions{}); fieldErr == nil {
+	} else if item, fieldErr := grammar.ParseAlternative[Array](s, &c, _Json_alts[4], grammar.TokenOptions{}); fieldErr == nil {
 		r.Array = item
 		return nil
 	} else {
 		err = err.Merge(fieldErr)
 	}
 	// Dict *Dict
-	if ok, tryErr := a.Try(_Json_lr[5], _Json_Dict_first); !ok {
+	if ok, tryErr := c.Try(_Json_alts[5]); !ok {
 		err = err.Merge(tryErr)
-	} else if item, fieldErr := grammar.ParseAlternative[Dict](s, &a, _Json_lr[5], grammar.TokenOptions{}); fieldErr == nil {
+	} else if item, fieldErr := grammar.ParseAlternative[Dict](s, &c, _Json_alts[5], grammar.TokenOptions{}); fieldErr == nil {
 		r.Dict = item
 		return nil
 	} else {

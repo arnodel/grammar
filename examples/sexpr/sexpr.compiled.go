@@ -50,7 +50,7 @@ func (r *List) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err
 }
 
 var (
-	_SExpr_lr           = grammar.LeftRecursionOf[SExpr]()
+	_SExpr_alts         = grammar.AlternativesOf[SExpr]()
 	_SExpr_plain        = grammar.PlainAlternatives[SExpr]()
 	_SExpr_Number_tok   = grammar.TokenOptionsFromTag("number")
 	_SExpr_Number_first = grammar.FirstSetOf[Token](_SExpr_Number_tok)
@@ -101,39 +101,38 @@ func (r *SExpr) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (er
 // parseGeneral is Parse for when an alternative is left recursive or has a
 // precedence.
 func (r *SExpr) parseGeneral(s *grammar.ParserState) (err *grammar.ParseError) {
-	a := grammar.AlternativesOf[SExpr](s)
-	defer a.Done()
+	c := grammar.ChoiceOf[SExpr](s)
 	// Number *Token
-	if ok, tryErr := a.Try(_SExpr_lr[0], _SExpr_Number_first); !ok {
+	if ok, tryErr := c.Try(_SExpr_alts[0]); !ok {
 		err = err.Merge(tryErr)
-	} else if item, fieldErr := grammar.ParseAlternative[Token](s, &a, _SExpr_lr[0], _SExpr_Number_tok); fieldErr == nil {
+	} else if item, fieldErr := grammar.ParseAlternative[Token](s, &c, _SExpr_alts[0], _SExpr_Number_tok); fieldErr == nil {
 		r.Number = item
 		return nil
 	} else {
 		err = err.Merge(fieldErr)
 	}
 	// String *Token
-	if ok, tryErr := a.Try(_SExpr_lr[1], _SExpr_String_first); !ok {
+	if ok, tryErr := c.Try(_SExpr_alts[1]); !ok {
 		err = err.Merge(tryErr)
-	} else if item, fieldErr := grammar.ParseAlternative[Token](s, &a, _SExpr_lr[1], _SExpr_String_tok); fieldErr == nil {
+	} else if item, fieldErr := grammar.ParseAlternative[Token](s, &c, _SExpr_alts[1], _SExpr_String_tok); fieldErr == nil {
 		r.String = item
 		return nil
 	} else {
 		err = err.Merge(fieldErr)
 	}
 	// Atom *Token
-	if ok, tryErr := a.Try(_SExpr_lr[2], _SExpr_Atom_first); !ok {
+	if ok, tryErr := c.Try(_SExpr_alts[2]); !ok {
 		err = err.Merge(tryErr)
-	} else if item, fieldErr := grammar.ParseAlternative[Token](s, &a, _SExpr_lr[2], _SExpr_Atom_tok); fieldErr == nil {
+	} else if item, fieldErr := grammar.ParseAlternative[Token](s, &c, _SExpr_alts[2], _SExpr_Atom_tok); fieldErr == nil {
 		r.Atom = item
 		return nil
 	} else {
 		err = err.Merge(fieldErr)
 	}
 	// List *List
-	if ok, tryErr := a.Try(_SExpr_lr[3], _SExpr_List_first); !ok {
+	if ok, tryErr := c.Try(_SExpr_alts[3]); !ok {
 		err = err.Merge(tryErr)
-	} else if item, fieldErr := grammar.ParseAlternative[List](s, &a, _SExpr_lr[3], grammar.TokenOptions{}); fieldErr == nil {
+	} else if item, fieldErr := grammar.ParseAlternative[List](s, &c, _SExpr_alts[3], grammar.TokenOptions{}); fieldErr == nil {
 		r.List = item
 		return nil
 	} else {
