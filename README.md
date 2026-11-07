@@ -314,9 +314,10 @@ Parsing `1 + 2 + 3` gives `Sum{Sum{1, 2}, 3}`.  Indirect left recursion
 
 With several operators, left recursion alone gives every operator the same
 precedence.  A `prec` tag on the `Seq` field of an operator rule gives it a
-level: among the alternatives of a `OneOf` (or `Sum`), a rule with a level
-only applies when the level in effect is lower, and its operands after the
-first are parsed under its own level.  Higher binds tighter.
+level, a positive integer: among the alternatives of a `OneOf` (or `Sum`), a
+rule with a level only applies when the level in effect is lower, and its
+operands after the first are parsed under its own level.  Higher binds
+tighter.
 
 ```golang
 type Expr struct {
@@ -366,9 +367,11 @@ operator is not left recursive, so its level only binds its operand.  The
 level is consumed by the first rule entered, so the expression inside
 `Paren` starts afresh, as do function arguments or anything else bracketed.
 
-A level may be given to a group of operators instead of each of them, with a
+Operators may be grouped, as alternatives of a `Sum` within the `Sum` (the
+groups are flattened into it for parsing and wrapped back in the tree), and
+a level may be given to a group instead of each of its members, with a
 `prec` tag on the `OneOf` field of the group's declaration (or on an
-embedded `OneOfN`), and a group member may still state its own.  A flat list
+embedded `OneOfN`); a group member may still state its own.  A flat list
 is written as usual, `First Expr` then `Rest []Term`, with the level on the
 term rule too since it binds the term's operand.  A level set by an operator
 of `Expr` only constrains `Expr`: a language with separate value and type

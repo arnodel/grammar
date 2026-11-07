@@ -10,11 +10,12 @@
   after the first are parsed under its own level.  A `prec` tag on a
   `OneOf` field (or an embedded `OneOfN` or `Sum`) is the default level of
   its alternatives.  Levels are per sum: a level set by an operator of one
-  expression grammar does not constrain another.  Left-recursive
-  alternatives are parsed by precedence climbing when they all start with
-  the rule itself, with a dispatch table built from their first sets, and by
-  seed growing otherwise, which now skips the alternatives whose
-  continuation cannot start with the token after the seed.
+  expression grammar does not constrain another.  Levels are positive
+  integers.  Left-recursive alternatives are parsed by precedence climbing
+  when they all start with the rule itself, with a dispatch table built
+  from their first sets, and by seed growing otherwise.  A group of
+  operators must be declared in a `Sum`, which flattens it into the rule;
+  one in a plain `OneOf` is a definition error.
 - `Sum[T]`: the memory-efficient form of a `OneOf` rule type `T`, whose
   value is just a pointer to the alternative that matched, as with the
   `OneOfN` rules.  `T` declares the alternatives with their tags.  Nested
@@ -27,6 +28,10 @@
 
 - A repetition whose item matched without consuming anything (an untagged
   token field, for instance) looped forever; it stops after that item.
+- Two rules left recursive at the same position, one parsed within the
+  other (`R = X | Name`, `X = X "*" Name | R ":" Name | Name`), could leave
+  a stale memo entry behind and mis-parse (`a * b` parsed as `a`); the
+  dependent rule now drops its entry when it is done.
 
 ### Performance
 
