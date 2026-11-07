@@ -152,7 +152,35 @@ func (r *DictItem) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) 
 	return nil
 }
 
+// ParseRest parses the fields after the first, which is already set (the
+// left operand); the others are bound to the precedence level.
+func (r *DictItem) ParseRest(s *grammar.ParserState, pending grammar.PendingPrec) (err *grammar.ParseError) {
+	itemCount := 1
+	// Colon grammar.Match
+	if s.Debug() {
+		s.Logf("  .Colon tok #%d", s.Save())
+	}
+	s.SetPrec(pending.Prec(1))
+	if fieldErr := grammar.ParseWithOptions(&r.Colon, s, _DictItem_Colon_tok); fieldErr != nil {
+		return err.Merge(fieldErr)
+	}
+	itemCount++
+	// Value Json
+	if s.Debug() {
+		s.Logf("  .Value tok #%d", s.Save())
+	}
+	s.SetPrec(pending.Prec(2))
+	if fieldErr := grammar.ParseWithOptions(&r.Value, s, grammar.TokenOptions{}); fieldErr != nil {
+		return err.Merge(fieldErr)
+	}
+	itemCount++
+	_ = itemCount
+	return nil
+}
+
 var (
+	_Json_lr           = grammar.LeftRecursionOf[Json]()
+	_Json_plain        = grammar.PlainAlternatives[Json]()
 	_Json_Number_first = grammar.FirstSetOf[Number](grammar.TokenOptions{})
 	_Json_String_first = grammar.FirstSetOf[String](grammar.TokenOptions{})
 	_Json_Null_first   = grammar.FirstSetOf[Null](grammar.TokenOptions{})
@@ -164,6 +192,9 @@ var (
 // Parse implements grammar.Parser for Json without reflection; it
 // does what grammar.OneOf.Parse does.
 func (r *Json) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err *grammar.ParseError) {
+	if !_Json_plain {
+		return r.parseGeneral(s)
+	}
 	// Number *Number
 	if item, fieldErr := grammar.ParseOptional[Number](s, grammar.TokenOptions{}, _Json_Number_first); fieldErr == nil {
 		r.Number = item
@@ -201,6 +232,68 @@ func (r *Json) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err
 	}
 	// Dict *Dict
 	if item, fieldErr := grammar.ParseOptional[Dict](s, grammar.TokenOptions{}, _Json_Dict_first); fieldErr == nil {
+		r.Dict = item
+		return nil
+	} else {
+		err = err.Merge(fieldErr)
+	}
+	return err
+}
+
+// parseGeneral is Parse for when an alternative is left recursive or has a
+// precedence.
+func (r *Json) parseGeneral(s *grammar.ParserState) (err *grammar.ParseError) {
+	a := grammar.AlternativesOf[Json](s)
+	defer a.Done()
+	// Number *Number
+	if ok, tryErr := a.Try(_Json_lr[0], _Json_Number_first); !ok {
+		err = err.Merge(tryErr)
+	} else if item, fieldErr := grammar.ParseAlternative[Number](s, &a, _Json_lr[0], grammar.TokenOptions{}); fieldErr == nil {
+		r.Number = item
+		return nil
+	} else {
+		err = err.Merge(fieldErr)
+	}
+	// String *String
+	if ok, tryErr := a.Try(_Json_lr[1], _Json_String_first); !ok {
+		err = err.Merge(tryErr)
+	} else if item, fieldErr := grammar.ParseAlternative[String](s, &a, _Json_lr[1], grammar.TokenOptions{}); fieldErr == nil {
+		r.String = item
+		return nil
+	} else {
+		err = err.Merge(fieldErr)
+	}
+	// Null *Null
+	if ok, tryErr := a.Try(_Json_lr[2], _Json_Null_first); !ok {
+		err = err.Merge(tryErr)
+	} else if item, fieldErr := grammar.ParseAlternative[Null](s, &a, _Json_lr[2], grammar.TokenOptions{}); fieldErr == nil {
+		r.Null = item
+		return nil
+	} else {
+		err = err.Merge(fieldErr)
+	}
+	// Bool *Bool
+	if ok, tryErr := a.Try(_Json_lr[3], _Json_Bool_first); !ok {
+		err = err.Merge(tryErr)
+	} else if item, fieldErr := grammar.ParseAlternative[Bool](s, &a, _Json_lr[3], grammar.TokenOptions{}); fieldErr == nil {
+		r.Bool = item
+		return nil
+	} else {
+		err = err.Merge(fieldErr)
+	}
+	// Array *Array
+	if ok, tryErr := a.Try(_Json_lr[4], _Json_Array_first); !ok {
+		err = err.Merge(tryErr)
+	} else if item, fieldErr := grammar.ParseAlternative[Array](s, &a, _Json_lr[4], grammar.TokenOptions{}); fieldErr == nil {
+		r.Array = item
+		return nil
+	} else {
+		err = err.Merge(fieldErr)
+	}
+	// Dict *Dict
+	if ok, tryErr := a.Try(_Json_lr[5], _Json_Dict_first); !ok {
+		err = err.Merge(tryErr)
+	} else if item, fieldErr := grammar.ParseAlternative[Dict](s, &a, _Json_lr[5], grammar.TokenOptions{}); fieldErr == nil {
 		r.Dict = item
 		return nil
 	} else {

@@ -39,6 +39,27 @@ func (r *AddExpr) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (
 	return nil
 }
 
+// ParseRest parses the fields after the first, which is already set (the
+// left operand); the others are bound to the precedence level.
+func (r *AddExpr) ParseRest(s *grammar.ParserState, pending grammar.PendingPrec) (err *grammar.ParseError) {
+	itemCount := 1
+	// Rest []AddTerm
+	if s.Debug() {
+		s.Logf("  .Rest tok #%d", s.Save())
+	}
+	rep1 := _AddExpr_Rest_rep
+	rep1.Prec = pending.Prec(1)
+	if items, n, fieldErr, ok := grammar.ParseRepeated[AddTerm](s, grammar.TokenOptions{}, rep1); ok {
+		err = err.Merge(fieldErr)
+		r.Rest = items
+		itemCount += n
+	} else {
+		return err.Merge(fieldErr)
+	}
+	_ = itemCount
+	return nil
+}
+
 var (
 	_AddTerm_Op_tok = grammar.TokenOptionsFromTag("op,+|op,-")
 )
@@ -102,6 +123,27 @@ func (r *AndExpr) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (
 	return nil
 }
 
+// ParseRest parses the fields after the first, which is already set (the
+// left operand); the others are bound to the precedence level.
+func (r *AndExpr) ParseRest(s *grammar.ParserState, pending grammar.PendingPrec) (err *grammar.ParseError) {
+	itemCount := 1
+	// Rest []AndTerm
+	if s.Debug() {
+		s.Logf("  .Rest tok #%d", s.Save())
+	}
+	rep1 := _AndExpr_Rest_rep
+	rep1.Prec = pending.Prec(1)
+	if items, n, fieldErr, ok := grammar.ParseRepeated[AndTerm](s, grammar.TokenOptions{}, rep1); ok {
+		err = err.Merge(fieldErr)
+		r.Rest = items
+		itemCount += n
+	} else {
+		return err.Merge(fieldErr)
+	}
+	_ = itemCount
+	return nil
+}
+
 var (
 	_AndTerm_And_tok = grammar.TokenOptionsFromTag("kw,AND")
 )
@@ -133,6 +175,8 @@ func (r *AndTerm) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (
 }
 
 var (
+	_Atom_lr             = grammar.LeftRecursionOf[Atom]()
+	_Atom_plain          = grammar.PlainAlternatives[Atom]()
 	_Atom_Literal_first  = grammar.FirstSetOf[Literal](grammar.TokenOptions{})
 	_Atom_Param_tok      = grammar.TokenOptionsFromTag("param")
 	_Atom_Param_first    = grammar.FirstSetOf[Token](_Atom_Param_tok)
@@ -148,6 +192,9 @@ var (
 // Parse implements grammar.Parser for Atom without reflection; it
 // does what grammar.OneOf.Parse does.
 func (r *Atom) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err *grammar.ParseError) {
+	if !_Atom_plain {
+		return r.parseGeneral(s)
+	}
 	// Literal *Literal
 	if item, fieldErr := grammar.ParseOptional[Literal](s, grammar.TokenOptions{}, _Atom_Literal_first); fieldErr == nil {
 		r.Literal = item
@@ -206,6 +253,95 @@ func (r *Atom) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err
 	}
 	// Paren *ParenExprs
 	if item, fieldErr := grammar.ParseOptional[ParenExprs](s, grammar.TokenOptions{}, _Atom_Paren_first); fieldErr == nil {
+		r.Paren = item
+		return nil
+	} else {
+		err = err.Merge(fieldErr)
+	}
+	return err
+}
+
+// parseGeneral is Parse for when an alternative is left recursive or has a
+// precedence.
+func (r *Atom) parseGeneral(s *grammar.ParserState) (err *grammar.ParseError) {
+	a := grammar.AlternativesOf[Atom](s)
+	defer a.Done()
+	// Literal *Literal
+	if ok, tryErr := a.Try(_Atom_lr[0], _Atom_Literal_first); !ok {
+		err = err.Merge(tryErr)
+	} else if item, fieldErr := grammar.ParseAlternative[Literal](s, &a, _Atom_lr[0], grammar.TokenOptions{}); fieldErr == nil {
+		r.Literal = item
+		return nil
+	} else {
+		err = err.Merge(fieldErr)
+	}
+	// Param *Token
+	if ok, tryErr := a.Try(_Atom_lr[1], _Atom_Param_first); !ok {
+		err = err.Merge(tryErr)
+	} else if item, fieldErr := grammar.ParseAlternative[Token](s, &a, _Atom_lr[1], _Atom_Param_tok); fieldErr == nil {
+		r.Param = item
+		return nil
+	} else {
+		err = err.Merge(fieldErr)
+	}
+	// Cast *CastExpr
+	if ok, tryErr := a.Try(_Atom_lr[2], _Atom_Cast_first); !ok {
+		err = err.Merge(tryErr)
+	} else if item, fieldErr := grammar.ParseAlternative[CastExpr](s, &a, _Atom_lr[2], grammar.TokenOptions{}); fieldErr == nil {
+		r.Cast = item
+		return nil
+	} else {
+		err = err.Merge(fieldErr)
+	}
+	// Case *CaseExpr
+	if ok, tryErr := a.Try(_Atom_lr[3], _Atom_Case_first); !ok {
+		err = err.Merge(tryErr)
+	} else if item, fieldErr := grammar.ParseAlternative[CaseExpr](s, &a, _Atom_lr[3], grammar.TokenOptions{}); fieldErr == nil {
+		r.Case = item
+		return nil
+	} else {
+		err = err.Merge(fieldErr)
+	}
+	// Exists *ExistsExpr
+	if ok, tryErr := a.Try(_Atom_lr[4], _Atom_Exists_first); !ok {
+		err = err.Merge(tryErr)
+	} else if item, fieldErr := grammar.ParseAlternative[ExistsExpr](s, &a, _Atom_lr[4], grammar.TokenOptions{}); fieldErr == nil {
+		r.Exists = item
+		return nil
+	} else {
+		err = err.Merge(fieldErr)
+	}
+	// Func *FuncCall
+	if ok, tryErr := a.Try(_Atom_lr[5], _Atom_Func_first); !ok {
+		err = err.Merge(tryErr)
+	} else if item, fieldErr := grammar.ParseAlternative[FuncCall](s, &a, _Atom_lr[5], grammar.TokenOptions{}); fieldErr == nil {
+		r.Func = item
+		return nil
+	} else {
+		err = err.Merge(fieldErr)
+	}
+	// Column *ColumnRef
+	if ok, tryErr := a.Try(_Atom_lr[6], _Atom_Column_first); !ok {
+		err = err.Merge(tryErr)
+	} else if item, fieldErr := grammar.ParseAlternative[ColumnRef](s, &a, _Atom_lr[6], grammar.TokenOptions{}); fieldErr == nil {
+		r.Column = item
+		return nil
+	} else {
+		err = err.Merge(fieldErr)
+	}
+	// Subquery *ParenSelect
+	if ok, tryErr := a.Try(_Atom_lr[7], _Atom_Subquery_first); !ok {
+		err = err.Merge(tryErr)
+	} else if item, fieldErr := grammar.ParseAlternative[ParenSelect](s, &a, _Atom_lr[7], grammar.TokenOptions{}); fieldErr == nil {
+		r.Subquery = item
+		return nil
+	} else {
+		err = err.Merge(fieldErr)
+	}
+	// Paren *ParenExprs
+	if ok, tryErr := a.Try(_Atom_lr[8], _Atom_Paren_first); !ok {
+		err = err.Merge(tryErr)
+	} else if item, fieldErr := grammar.ParseAlternative[ParenExprs](s, &a, _Atom_lr[8], grammar.TokenOptions{}); fieldErr == nil {
 		r.Paren = item
 		return nil
 	} else {
@@ -303,6 +439,27 @@ func (r *BitExpr) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (
 	if itemCount == 0 {
 		return grammar.EmptyMatchError(s, "BitExpr")
 	}
+	return nil
+}
+
+// ParseRest parses the fields after the first, which is already set (the
+// left operand); the others are bound to the precedence level.
+func (r *BitExpr) ParseRest(s *grammar.ParserState, pending grammar.PendingPrec) (err *grammar.ParseError) {
+	itemCount := 1
+	// Rest []BitTerm
+	if s.Debug() {
+		s.Logf("  .Rest tok #%d", s.Save())
+	}
+	rep1 := _BitExpr_Rest_rep
+	rep1.Prec = pending.Prec(1)
+	if items, n, fieldErr, ok := grammar.ParseRepeated[BitTerm](s, grammar.TokenOptions{}, rep1); ok {
+		err = err.Merge(fieldErr)
+		r.Rest = items
+		itemCount += n
+	} else {
+		return err.Merge(fieldErr)
+	}
+	_ = itemCount
 	return nil
 }
 
@@ -499,7 +656,30 @@ func (r *CmpExpr) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (
 	return nil
 }
 
+// ParseRest parses the fields after the first, which is already set (the
+// left operand); the others are bound to the precedence level.
+func (r *CmpExpr) ParseRest(s *grammar.ParserState, pending grammar.PendingPrec) (err *grammar.ParseError) {
+	itemCount := 1
+	// Rest []CmpTail
+	if s.Debug() {
+		s.Logf("  .Rest tok #%d", s.Save())
+	}
+	rep1 := _CmpExpr_Rest_rep
+	rep1.Prec = pending.Prec(1)
+	if items, n, fieldErr, ok := grammar.ParseRepeated[CmpTail](s, grammar.TokenOptions{}, rep1); ok {
+		err = err.Merge(fieldErr)
+		r.Rest = items
+		itemCount += n
+	} else {
+		return err.Merge(fieldErr)
+	}
+	_ = itemCount
+	return nil
+}
+
 var (
+	_CmpTail_lr            = grammar.LeftRecursionOf[CmpTail]()
+	_CmpTail_plain         = grammar.PlainAlternatives[CmpTail]()
 	_CmpTail_Cmp_first     = grammar.FirstSetOf[CmpTerm](grammar.TokenOptions{})
 	_CmpTail_Is_first      = grammar.FirstSetOf[IsTerm](grammar.TokenOptions{})
 	_CmpTail_Null_tok      = grammar.TokenOptionsFromTag("kw,ISNULL|kw,NOTNULL")
@@ -513,6 +693,9 @@ var (
 // Parse implements grammar.Parser for CmpTail without reflection; it
 // does what grammar.OneOf.Parse does.
 func (r *CmpTail) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err *grammar.ParseError) {
+	if !_CmpTail_plain {
+		return r.parseGeneral(s)
+	}
 	// Cmp *CmpTerm
 	if item, fieldErr := grammar.ParseOptional[CmpTerm](s, grammar.TokenOptions{}, _CmpTail_Cmp_first); fieldErr == nil {
 		r.Cmp = item
@@ -557,6 +740,77 @@ func (r *CmpTail) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (
 	}
 	// Like *LikeTerm
 	if item, fieldErr := grammar.ParseOptional[LikeTerm](s, grammar.TokenOptions{}, _CmpTail_Like_first); fieldErr == nil {
+		r.Like = item
+		return nil
+	} else {
+		err = err.Merge(fieldErr)
+	}
+	return err
+}
+
+// parseGeneral is Parse for when an alternative is left recursive or has a
+// precedence.
+func (r *CmpTail) parseGeneral(s *grammar.ParserState) (err *grammar.ParseError) {
+	a := grammar.AlternativesOf[CmpTail](s)
+	defer a.Done()
+	// Cmp *CmpTerm
+	if ok, tryErr := a.Try(_CmpTail_lr[0], _CmpTail_Cmp_first); !ok {
+		err = err.Merge(tryErr)
+	} else if item, fieldErr := grammar.ParseAlternative[CmpTerm](s, &a, _CmpTail_lr[0], grammar.TokenOptions{}); fieldErr == nil {
+		r.Cmp = item
+		return nil
+	} else {
+		err = err.Merge(fieldErr)
+	}
+	// Is *IsTerm
+	if ok, tryErr := a.Try(_CmpTail_lr[1], _CmpTail_Is_first); !ok {
+		err = err.Merge(tryErr)
+	} else if item, fieldErr := grammar.ParseAlternative[IsTerm](s, &a, _CmpTail_lr[1], grammar.TokenOptions{}); fieldErr == nil {
+		r.Is = item
+		return nil
+	} else {
+		err = err.Merge(fieldErr)
+	}
+	// Null *Token
+	if ok, tryErr := a.Try(_CmpTail_lr[2], _CmpTail_Null_first); !ok {
+		err = err.Merge(tryErr)
+	} else if item, fieldErr := grammar.ParseAlternative[Token](s, &a, _CmpTail_lr[2], _CmpTail_Null_tok); fieldErr == nil {
+		r.Null = item
+		return nil
+	} else {
+		err = err.Merge(fieldErr)
+	}
+	// NotNull *NotNullTerm
+	if ok, tryErr := a.Try(_CmpTail_lr[3], _CmpTail_NotNull_first); !ok {
+		err = err.Merge(tryErr)
+	} else if item, fieldErr := grammar.ParseAlternative[NotNullTerm](s, &a, _CmpTail_lr[3], grammar.TokenOptions{}); fieldErr == nil {
+		r.NotNull = item
+		return nil
+	} else {
+		err = err.Merge(fieldErr)
+	}
+	// Between *BetweenTerm
+	if ok, tryErr := a.Try(_CmpTail_lr[4], _CmpTail_Between_first); !ok {
+		err = err.Merge(tryErr)
+	} else if item, fieldErr := grammar.ParseAlternative[BetweenTerm](s, &a, _CmpTail_lr[4], grammar.TokenOptions{}); fieldErr == nil {
+		r.Between = item
+		return nil
+	} else {
+		err = err.Merge(fieldErr)
+	}
+	// In *InTerm
+	if ok, tryErr := a.Try(_CmpTail_lr[5], _CmpTail_In_first); !ok {
+		err = err.Merge(tryErr)
+	} else if item, fieldErr := grammar.ParseAlternative[InTerm](s, &a, _CmpTail_lr[5], grammar.TokenOptions{}); fieldErr == nil {
+		r.In = item
+		return nil
+	} else {
+		err = err.Merge(fieldErr)
+	}
+	// Like *LikeTerm
+	if ok, tryErr := a.Try(_CmpTail_lr[6], _CmpTail_Like_first); !ok {
+		err = err.Merge(tryErr)
+	} else if item, fieldErr := grammar.ParseAlternative[LikeTerm](s, &a, _CmpTail_lr[6], grammar.TokenOptions{}); fieldErr == nil {
 		r.Like = item
 		return nil
 	} else {
@@ -625,6 +879,27 @@ func (r *CollateExpr) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOption
 	if itemCount == 0 {
 		return grammar.EmptyMatchError(s, "CollateExpr")
 	}
+	return nil
+}
+
+// ParseRest parses the fields after the first, which is already set (the
+// left operand); the others are bound to the precedence level.
+func (r *CollateExpr) ParseRest(s *grammar.ParserState, pending grammar.PendingPrec) (err *grammar.ParseError) {
+	itemCount := 1
+	// Collate []Collation
+	if s.Debug() {
+		s.Logf("  .Collate tok #%d", s.Save())
+	}
+	rep1 := _CollateExpr_Collate_rep
+	rep1.Prec = pending.Prec(1)
+	if items, n, fieldErr, ok := grammar.ParseRepeated[Collation](s, grammar.TokenOptions{}, rep1); ok {
+		err = err.Merge(fieldErr)
+		r.Collate = items
+		itemCount += n
+	} else {
+		return err.Merge(fieldErr)
+	}
+	_ = itemCount
 	return nil
 }
 
@@ -713,6 +988,27 @@ func (r *ConcatExpr) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions
 	if itemCount == 0 {
 		return grammar.EmptyMatchError(s, "ConcatExpr")
 	}
+	return nil
+}
+
+// ParseRest parses the fields after the first, which is already set (the
+// left operand); the others are bound to the precedence level.
+func (r *ConcatExpr) ParseRest(s *grammar.ParserState, pending grammar.PendingPrec) (err *grammar.ParseError) {
+	itemCount := 1
+	// Rest []ConcatTerm
+	if s.Debug() {
+		s.Logf("  .Rest tok #%d", s.Save())
+	}
+	rep1 := _ConcatExpr_Rest_rep
+	rep1.Prec = pending.Prec(1)
+	if items, n, fieldErr, ok := grammar.ParseRepeated[ConcatTerm](s, grammar.TokenOptions{}, rep1); ok {
+		err = err.Merge(fieldErr)
+		r.Rest = items
+		itemCount += n
+	} else {
+		return err.Merge(fieldErr)
+	}
+	_ = itemCount
 	return nil
 }
 
@@ -900,6 +1196,27 @@ func (r *Expr) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err
 	return nil
 }
 
+// ParseRest parses the fields after the first, which is already set (the
+// left operand); the others are bound to the precedence level.
+func (r *Expr) ParseRest(s *grammar.ParserState, pending grammar.PendingPrec) (err *grammar.ParseError) {
+	itemCount := 1
+	// Rest []OrTerm
+	if s.Debug() {
+		s.Logf("  .Rest tok #%d", s.Save())
+	}
+	rep1 := _Expr_Rest_rep
+	rep1.Prec = pending.Prec(1)
+	if items, n, fieldErr, ok := grammar.ParseRepeated[OrTerm](s, grammar.TokenOptions{}, rep1); ok {
+		err = err.Merge(fieldErr)
+		r.Rest = items
+		itemCount += n
+	} else {
+		return err.Merge(fieldErr)
+	}
+	_ = itemCount
+	return nil
+}
+
 var (
 	_FilterClause_Filter_tok = grammar.TokenOptionsFromTag("ckw,FILTER")
 	_FilterClause_Open_tok   = grammar.TokenOptionsFromTag("op,(")
@@ -1056,6 +1373,100 @@ func (r *FuncCall) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) 
 	return nil
 }
 
+// ParseRest parses the fields after the first, which is already set (the
+// left operand); the others are bound to the precedence level.
+func (r *FuncCall) ParseRest(s *grammar.ParserState, pending grammar.PendingPrec) (err *grammar.ParseError) {
+	itemCount := 1
+	// Open grammar.Match
+	if s.Debug() {
+		s.Logf("  .Open tok #%d", s.Save())
+	}
+	s.SetPrec(pending.Prec(1))
+	if fieldErr := grammar.ParseWithOptions(&r.Open, s, _FuncCall_Open_tok); fieldErr != nil {
+		return err.Merge(fieldErr)
+	}
+	itemCount++
+	// Star *Token
+	if s.Debug() {
+		s.Logf("  .Star tok #%d", s.Save())
+	}
+	s.SetPrec(pending.Prec(2))
+	if item, fieldErr := grammar.ParseOptional[Token](s, _FuncCall_Star_tok, _FuncCall_Star_first); fieldErr != nil {
+		err = err.Merge(fieldErr)
+	} else {
+		r.Star = item
+		itemCount++
+	}
+	// Distinct *Token
+	if s.Debug() {
+		s.Logf("  .Distinct tok #%d", s.Save())
+	}
+	s.SetPrec(pending.Prec(3))
+	if item, fieldErr := grammar.ParseOptional[Token](s, _FuncCall_Distinct_tok, _FuncCall_Distinct_first); fieldErr != nil {
+		err = err.Merge(fieldErr)
+	} else {
+		r.Distinct = item
+		itemCount++
+	}
+	// Args []Expr
+	if s.Debug() {
+		s.Logf("  .Args tok #%d", s.Save())
+	}
+	rep4 := _FuncCall_Args_rep
+	rep4.Prec = pending.Prec(4)
+	if items, n, fieldErr, ok := grammar.ParseRepeated[Expr](s, grammar.TokenOptions{}, rep4); ok {
+		err = err.Merge(fieldErr)
+		r.Args = items
+		itemCount += n
+	} else {
+		return err.Merge(fieldErr)
+	}
+	// OrderBy *OrderBy
+	if s.Debug() {
+		s.Logf("  .OrderBy tok #%d", s.Save())
+	}
+	s.SetPrec(pending.Prec(5))
+	if item, fieldErr := grammar.ParseOptional[OrderBy](s, grammar.TokenOptions{}, _FuncCall_OrderBy_first); fieldErr != nil {
+		err = err.Merge(fieldErr)
+	} else {
+		r.OrderBy = item
+		itemCount++
+	}
+	// Close grammar.Match
+	if s.Debug() {
+		s.Logf("  .Close tok #%d", s.Save())
+	}
+	s.SetPrec(pending.Prec(6))
+	if fieldErr := grammar.ParseWithOptions(&r.Close, s, _FuncCall_Close_tok); fieldErr != nil {
+		return err.Merge(fieldErr)
+	}
+	itemCount++
+	// Filter *FilterClause
+	if s.Debug() {
+		s.Logf("  .Filter tok #%d", s.Save())
+	}
+	s.SetPrec(pending.Prec(7))
+	if item, fieldErr := grammar.ParseOptional[FilterClause](s, grammar.TokenOptions{}, _FuncCall_Filter_first); fieldErr != nil {
+		err = err.Merge(fieldErr)
+	} else {
+		r.Filter = item
+		itemCount++
+	}
+	// Over *OverClause
+	if s.Debug() {
+		s.Logf("  .Over tok #%d", s.Save())
+	}
+	s.SetPrec(pending.Prec(8))
+	if item, fieldErr := grammar.ParseOptional[OverClause](s, grammar.TokenOptions{}, _FuncCall_Over_first); fieldErr != nil {
+		err = err.Merge(fieldErr)
+	} else {
+		r.Over = item
+		itemCount++
+	}
+	_ = itemCount
+	return nil
+}
+
 var (
 	_InList_Open_tok  = grammar.TokenOptionsFromTag("op,(")
 	_InList_Exprs_rep = grammar.MustRepeatOptions[Expr]("", "op,,", "", "", "")
@@ -1100,6 +1511,8 @@ func (r *InList) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (e
 }
 
 var (
+	_InTarget_lr             = grammar.LeftRecursionOf[InTarget]()
+	_InTarget_plain          = grammar.PlainAlternatives[InTarget]()
 	_InTarget_Subquery_first = grammar.FirstSetOf[ParenSelect](grammar.TokenOptions{})
 	_InTarget_List_first     = grammar.FirstSetOf[InList](grammar.TokenOptions{})
 	_InTarget_Table_first    = grammar.FirstSetOf[QualifiedName](grammar.TokenOptions{})
@@ -1108,6 +1521,9 @@ var (
 // Parse implements grammar.Parser for InTarget without reflection; it
 // does what grammar.OneOf.Parse does.
 func (r *InTarget) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err *grammar.ParseError) {
+	if !_InTarget_plain {
+		return r.parseGeneral(s)
+	}
 	// Subquery *ParenSelect
 	if item, fieldErr := grammar.ParseOptional[ParenSelect](s, grammar.TokenOptions{}, _InTarget_Subquery_first); fieldErr == nil {
 		r.Subquery = item
@@ -1124,6 +1540,41 @@ func (r *InTarget) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) 
 	}
 	// Table *QualifiedName
 	if item, fieldErr := grammar.ParseOptional[QualifiedName](s, grammar.TokenOptions{}, _InTarget_Table_first); fieldErr == nil {
+		r.Table = item
+		return nil
+	} else {
+		err = err.Merge(fieldErr)
+	}
+	return err
+}
+
+// parseGeneral is Parse for when an alternative is left recursive or has a
+// precedence.
+func (r *InTarget) parseGeneral(s *grammar.ParserState) (err *grammar.ParseError) {
+	a := grammar.AlternativesOf[InTarget](s)
+	defer a.Done()
+	// Subquery *ParenSelect
+	if ok, tryErr := a.Try(_InTarget_lr[0], _InTarget_Subquery_first); !ok {
+		err = err.Merge(tryErr)
+	} else if item, fieldErr := grammar.ParseAlternative[ParenSelect](s, &a, _InTarget_lr[0], grammar.TokenOptions{}); fieldErr == nil {
+		r.Subquery = item
+		return nil
+	} else {
+		err = err.Merge(fieldErr)
+	}
+	// List *InList
+	if ok, tryErr := a.Try(_InTarget_lr[1], _InTarget_List_first); !ok {
+		err = err.Merge(tryErr)
+	} else if item, fieldErr := grammar.ParseAlternative[InList](s, &a, _InTarget_lr[1], grammar.TokenOptions{}); fieldErr == nil {
+		r.List = item
+		return nil
+	} else {
+		err = err.Merge(fieldErr)
+	}
+	// Table *QualifiedName
+	if ok, tryErr := a.Try(_InTarget_lr[2], _InTarget_Table_first); !ok {
+		err = err.Merge(tryErr)
+	} else if item, fieldErr := grammar.ParseAlternative[QualifiedName](s, &a, _InTarget_lr[2], grammar.TokenOptions{}); fieldErr == nil {
 		r.Table = item
 		return nil
 	} else {
@@ -1320,6 +1771,27 @@ func (r *MulExpr) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (
 	return nil
 }
 
+// ParseRest parses the fields after the first, which is already set (the
+// left operand); the others are bound to the precedence level.
+func (r *MulExpr) ParseRest(s *grammar.ParserState, pending grammar.PendingPrec) (err *grammar.ParseError) {
+	itemCount := 1
+	// Rest []MulTerm
+	if s.Debug() {
+		s.Logf("  .Rest tok #%d", s.Save())
+	}
+	rep1 := _MulExpr_Rest_rep
+	rep1.Prec = pending.Prec(1)
+	if items, n, fieldErr, ok := grammar.ParseRepeated[MulTerm](s, grammar.TokenOptions{}, rep1); ok {
+		err = err.Merge(fieldErr)
+		r.Rest = items
+		itemCount += n
+	} else {
+		return err.Merge(fieldErr)
+	}
+	_ = itemCount
+	return nil
+}
+
 var (
 	_MulTerm_Op_tok = grammar.TokenOptionsFromTag("op,*|op,/|op,%")
 )
@@ -1388,6 +1860,8 @@ func (r *Negation) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) 
 }
 
 var (
+	_NotExpr_lr        = grammar.LeftRecursionOf[NotExpr]()
+	_NotExpr_plain     = grammar.PlainAlternatives[NotExpr]()
 	_NotExpr_Not_first = grammar.FirstSetOf[Negation](grammar.TokenOptions{})
 	_NotExpr_Cmp_first = grammar.FirstSetOf[CmpExpr](grammar.TokenOptions{})
 )
@@ -1395,6 +1869,9 @@ var (
 // Parse implements grammar.Parser for NotExpr without reflection; it
 // does what grammar.OneOf.Parse does.
 func (r *NotExpr) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err *grammar.ParseError) {
+	if !_NotExpr_plain {
+		return r.parseGeneral(s)
+	}
 	// Not *Negation
 	if item, fieldErr := grammar.ParseOptional[Negation](s, grammar.TokenOptions{}, _NotExpr_Not_first); fieldErr == nil {
 		r.Not = item
@@ -1404,6 +1881,32 @@ func (r *NotExpr) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (
 	}
 	// Cmp *CmpExpr
 	if item, fieldErr := grammar.ParseOptional[CmpExpr](s, grammar.TokenOptions{}, _NotExpr_Cmp_first); fieldErr == nil {
+		r.Cmp = item
+		return nil
+	} else {
+		err = err.Merge(fieldErr)
+	}
+	return err
+}
+
+// parseGeneral is Parse for when an alternative is left recursive or has a
+// precedence.
+func (r *NotExpr) parseGeneral(s *grammar.ParserState) (err *grammar.ParseError) {
+	a := grammar.AlternativesOf[NotExpr](s)
+	defer a.Done()
+	// Not *Negation
+	if ok, tryErr := a.Try(_NotExpr_lr[0], _NotExpr_Not_first); !ok {
+		err = err.Merge(tryErr)
+	} else if item, fieldErr := grammar.ParseAlternative[Negation](s, &a, _NotExpr_lr[0], grammar.TokenOptions{}); fieldErr == nil {
+		r.Not = item
+		return nil
+	} else {
+		err = err.Merge(fieldErr)
+	}
+	// Cmp *CmpExpr
+	if ok, tryErr := a.Try(_NotExpr_lr[1], _NotExpr_Cmp_first); !ok {
+		err = err.Merge(tryErr)
+	} else if item, fieldErr := grammar.ParseAlternative[CmpExpr](s, &a, _NotExpr_lr[1], grammar.TokenOptions{}); fieldErr == nil {
 		r.Cmp = item
 		return nil
 	} else {
@@ -1643,6 +2146,27 @@ func (r *RelExpr) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (
 	return nil
 }
 
+// ParseRest parses the fields after the first, which is already set (the
+// left operand); the others are bound to the precedence level.
+func (r *RelExpr) ParseRest(s *grammar.ParserState, pending grammar.PendingPrec) (err *grammar.ParseError) {
+	itemCount := 1
+	// Rest []RelTerm
+	if s.Debug() {
+		s.Logf("  .Rest tok #%d", s.Save())
+	}
+	rep1 := _RelExpr_Rest_rep
+	rep1.Prec = pending.Prec(1)
+	if items, n, fieldErr, ok := grammar.ParseRepeated[RelTerm](s, grammar.TokenOptions{}, rep1); ok {
+		err = err.Merge(fieldErr)
+		r.Rest = items
+		itemCount += n
+	} else {
+		return err.Merge(fieldErr)
+	}
+	_ = itemCount
+	return nil
+}
+
 var (
 	_RelTerm_Op_tok = grammar.TokenOptionsFromTag("op,<|op,>|op,<=|op,>=")
 )
@@ -1787,6 +2311,8 @@ func (r *TypeSize) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) 
 }
 
 var (
+	_UnaryExpr_lr            = grammar.LeftRecursionOf[UnaryExpr]()
+	_UnaryExpr_plain         = grammar.PlainAlternatives[UnaryExpr]()
 	_UnaryExpr_Op_first      = grammar.FirstSetOf[UnaryOp](grammar.TokenOptions{})
 	_UnaryExpr_Collate_first = grammar.FirstSetOf[CollateExpr](grammar.TokenOptions{})
 )
@@ -1794,6 +2320,9 @@ var (
 // Parse implements grammar.Parser for UnaryExpr without reflection; it
 // does what grammar.OneOf.Parse does.
 func (r *UnaryExpr) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err *grammar.ParseError) {
+	if !_UnaryExpr_plain {
+		return r.parseGeneral(s)
+	}
 	// Op *UnaryOp
 	if item, fieldErr := grammar.ParseOptional[UnaryOp](s, grammar.TokenOptions{}, _UnaryExpr_Op_first); fieldErr == nil {
 		r.Op = item
@@ -1803,6 +2332,32 @@ func (r *UnaryExpr) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions)
 	}
 	// Collate *CollateExpr
 	if item, fieldErr := grammar.ParseOptional[CollateExpr](s, grammar.TokenOptions{}, _UnaryExpr_Collate_first); fieldErr == nil {
+		r.Collate = item
+		return nil
+	} else {
+		err = err.Merge(fieldErr)
+	}
+	return err
+}
+
+// parseGeneral is Parse for when an alternative is left recursive or has a
+// precedence.
+func (r *UnaryExpr) parseGeneral(s *grammar.ParserState) (err *grammar.ParseError) {
+	a := grammar.AlternativesOf[UnaryExpr](s)
+	defer a.Done()
+	// Op *UnaryOp
+	if ok, tryErr := a.Try(_UnaryExpr_lr[0], _UnaryExpr_Op_first); !ok {
+		err = err.Merge(tryErr)
+	} else if item, fieldErr := grammar.ParseAlternative[UnaryOp](s, &a, _UnaryExpr_lr[0], grammar.TokenOptions{}); fieldErr == nil {
+		r.Op = item
+		return nil
+	} else {
+		err = err.Merge(fieldErr)
+	}
+	// Collate *CollateExpr
+	if ok, tryErr := a.Try(_UnaryExpr_lr[1], _UnaryExpr_Collate_first); !ok {
+		err = err.Merge(tryErr)
+	} else if item, fieldErr := grammar.ParseAlternative[CollateExpr](s, &a, _UnaryExpr_lr[1], grammar.TokenOptions{}); fieldErr == nil {
 		r.Collate = item
 		return nil
 	} else {
@@ -1889,6 +2444,8 @@ func (r *WhenClause) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions
 }
 
 var (
+	_WindowSpec_lr         = grammar.LeftRecursionOf[WindowSpec]()
+	_WindowSpec_plain      = grammar.PlainAlternatives[WindowSpec]()
 	_WindowSpec_Def_first  = grammar.FirstSetOf[WindowDef](grammar.TokenOptions{})
 	_WindowSpec_Name_first = grammar.FirstSetOf[Name](grammar.TokenOptions{})
 )
@@ -1896,6 +2453,9 @@ var (
 // Parse implements grammar.Parser for WindowSpec without reflection; it
 // does what grammar.OneOf.Parse does.
 func (r *WindowSpec) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err *grammar.ParseError) {
+	if !_WindowSpec_plain {
+		return r.parseGeneral(s)
+	}
 	// Def *WindowDef
 	if item, fieldErr := grammar.ParseOptional[WindowDef](s, grammar.TokenOptions{}, _WindowSpec_Def_first); fieldErr == nil {
 		r.Def = item
@@ -1905,6 +2465,32 @@ func (r *WindowSpec) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions
 	}
 	// Name *Name
 	if item, fieldErr := grammar.ParseOptional[Name](s, grammar.TokenOptions{}, _WindowSpec_Name_first); fieldErr == nil {
+		r.Name = item
+		return nil
+	} else {
+		err = err.Merge(fieldErr)
+	}
+	return err
+}
+
+// parseGeneral is Parse for when an alternative is left recursive or has a
+// precedence.
+func (r *WindowSpec) parseGeneral(s *grammar.ParserState) (err *grammar.ParseError) {
+	a := grammar.AlternativesOf[WindowSpec](s)
+	defer a.Done()
+	// Def *WindowDef
+	if ok, tryErr := a.Try(_WindowSpec_lr[0], _WindowSpec_Def_first); !ok {
+		err = err.Merge(tryErr)
+	} else if item, fieldErr := grammar.ParseAlternative[WindowDef](s, &a, _WindowSpec_lr[0], grammar.TokenOptions{}); fieldErr == nil {
+		r.Def = item
+		return nil
+	} else {
+		err = err.Merge(fieldErr)
+	}
+	// Name *Name
+	if ok, tryErr := a.Try(_WindowSpec_lr[1], _WindowSpec_Name_first); !ok {
+		err = err.Merge(tryErr)
+	} else if item, fieldErr := grammar.ParseAlternative[Name](s, &a, _WindowSpec_lr[1], grammar.TokenOptions{}); fieldErr == nil {
 		r.Name = item
 		return nil
 	} else {

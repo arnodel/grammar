@@ -7,22 +7,76 @@ package expr
 import grammar "github.com/arnodel/grammar"
 
 var (
+	_Expr_lr        = grammar.LeftRecursionOf[Expr]()
+	_Expr_direct    = grammar.DirectLeftRecursionOnly[Expr]()
+	_Expr_dispatch  = grammar.DispatchOf[Expr]()
 	_Expr_Sum_first = grammar.FirstSetOf[Sum](grammar.TokenOptions{})
 	_Expr_Num_first = grammar.FirstSetOf[Num](grammar.TokenOptions{})
 )
 
-// Parse implements grammar.Parser for Expr without reflection; it
-// does what grammar.OneOf.Parse does.
+// Parse implements grammar.Parser for Expr without reflection.  The
+// alternatives that start with Expr itself are parsed as a loop
+// extending the value parsed by the others (precedence climbing), unless
+// the rule turns out to be left recursive through other rules too.
 func (r *Expr) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err *grammar.ParseError) {
+	if !_Expr_direct {
+		return r.parseGrowing(s)
+	}
+	a := grammar.AlternativesOf[Expr](s)
+	seeded := false
+	// Num *Num
+	if seeded {
+	} else if ok, tryErr := a.Try(_Expr_lr[1], _Expr_Num_first); !ok {
+		err = err.Merge(tryErr)
+	} else if item, fieldErr := grammar.ParseAlternative[Num](s, &a, _Expr_lr[1], grammar.TokenOptions{}); fieldErr == nil {
+		r.Num = item
+		seeded = true
+	} else {
+		err = err.Merge(fieldErr)
+	}
+	if !seeded {
+		return err
+	}
+	for {
+		mask := _Expr_dispatch.Lookup(s.Peek(), a.Level())
+		if mask == 0 {
+			break
+		}
+		// Sum *Sum
+		if mask&(1<<0) != 0 {
+			start := s.Save()
+			item := &Sum{}
+			item.Lhs = *r
+			if fieldErr := item.ParseRest(s, a.PendingFor(_Expr_lr[0])); fieldErr == nil && s.Save() > start {
+				*r = Expr{Sum: item}
+				continue
+			} else {
+				err = err.Merge(fieldErr)
+				s.Restore(start)
+			}
+		}
+		break
+	}
+	_Expr_dispatch.Expect(s, a.Level())
+	return nil
+}
+
+func (r *Expr) parseGrowing(s *grammar.ParserState) (err *grammar.ParseError) {
+	a := grammar.AlternativesOf[Expr](s)
+	defer a.Done()
 	// Sum *Sum
-	if item, fieldErr := grammar.ParseOptional[Sum](s, grammar.TokenOptions{}, _Expr_Sum_first); fieldErr == nil {
+	if ok, tryErr := a.Try(_Expr_lr[0], _Expr_Sum_first); !ok {
+		err = err.Merge(tryErr)
+	} else if item, fieldErr := grammar.ParseAlternative[Sum](s, &a, _Expr_lr[0], grammar.TokenOptions{}); fieldErr == nil {
 		r.Sum = item
 		return nil
 	} else {
 		err = err.Merge(fieldErr)
 	}
 	// Num *Num
-	if item, fieldErr := grammar.ParseOptional[Num](s, grammar.TokenOptions{}, _Expr_Num_first); fieldErr == nil {
+	if ok, tryErr := a.Try(_Expr_lr[1], _Expr_Num_first); !ok {
+		err = err.Merge(tryErr)
+	} else if item, fieldErr := grammar.ParseAlternative[Num](s, &a, _Expr_lr[1], grammar.TokenOptions{}); fieldErr == nil {
 		r.Num = item
 		return nil
 	} else {
@@ -73,5 +127,31 @@ func (r *Sum) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err 
 	if itemCount == 0 {
 		return grammar.EmptyMatchError(s, "Sum")
 	}
+	return nil
+}
+
+// ParseRest parses the fields after the first, which is already set (the
+// left operand); the others are bound to the precedence level.
+func (r *Sum) ParseRest(s *grammar.ParserState, pending grammar.PendingPrec) (err *grammar.ParseError) {
+	itemCount := 1
+	// Plus grammar.Match
+	if s.Debug() {
+		s.Logf("  .Plus tok #%d", s.Save())
+	}
+	s.SetPrec(pending.Prec(1))
+	if fieldErr := grammar.ParseWithOptions(&r.Plus, s, _Sum_Plus_tok); fieldErr != nil {
+		return err.Merge(fieldErr)
+	}
+	itemCount++
+	// Rhs Num
+	if s.Debug() {
+		s.Logf("  .Rhs tok #%d", s.Save())
+	}
+	s.SetPrec(pending.Prec(2))
+	if fieldErr := grammar.ParseWithOptions(&r.Rhs, s, grammar.TokenOptions{}); fieldErr != nil {
+		return err.Merge(fieldErr)
+	}
+	itemCount++
+	_ = itemCount
 	return nil
 }
