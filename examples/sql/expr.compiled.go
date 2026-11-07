@@ -7,26 +7,30 @@ package sql
 import grammar "github.com/arnodel/grammar"
 
 var (
-	_AddExpr_Rest_rep = grammar.MustRepeatOptions[AddTerm]("", "", "", "", "")
+	_Additive_Rest_rep = grammar.MustRepeatOptions[AdditiveTerm]("1-", "", "", "", "")
 )
 
-// Parse implements grammar.Parser for AddExpr without reflection; it
+// Parse implements grammar.Parser for Additive without reflection; it
 // does what grammar.Seq.Parse does.
-func (r *AddExpr) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err *grammar.ParseError) {
+func (r *Additive) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err *grammar.ParseError) {
 	itemCount := 0
-	// First MulExpr
+	pending := s.TakePendingOr(7, true)
+	// First Expr
 	if s.Debug() {
 		s.Logf("  .First tok #%d", s.Save())
 	}
+	s.SetPrec(pending.Prec(0))
 	if fieldErr := grammar.ParseWithOptions(&r.First, s, grammar.TokenOptions{}); fieldErr != nil {
 		return err.Merge(fieldErr)
 	}
 	itemCount++
-	// Rest []AddTerm
+	// Rest []AdditiveTerm
 	if s.Debug() {
 		s.Logf("  .Rest tok #%d", s.Save())
 	}
-	if items, n, fieldErr, ok := grammar.ParseRepeated[AddTerm](s, grammar.TokenOptions{}, _AddExpr_Rest_rep); ok {
+	rep1 := _Additive_Rest_rep
+	rep1.Prec = pending.Prec(1)
+	if items, n, fieldErr, ok := grammar.ParseRepeated[AdditiveTerm](s, grammar.TokenOptions{}, rep1); ok {
 		err = err.Merge(fieldErr)
 		r.Rest = items
 		itemCount += n
@@ -34,22 +38,22 @@ func (r *AddExpr) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (
 		return err.Merge(fieldErr)
 	}
 	if itemCount == 0 {
-		return grammar.EmptyMatchError(s, "AddExpr")
+		return grammar.EmptyMatchError(s, "Additive")
 	}
 	return nil
 }
 
 // ParseRest parses the fields after the first, which is already set (the
 // left operand); the others are bound to the precedence level.
-func (r *AddExpr) ParseRest(s *grammar.ParserState, pending grammar.PendingPrec) (err *grammar.ParseError) {
+func (r *Additive) ParseRest(s *grammar.ParserState, pending grammar.PendingPrec) (err *grammar.ParseError) {
 	itemCount := 1
-	// Rest []AddTerm
+	// Rest []AdditiveTerm
 	if s.Debug() {
 		s.Logf("  .Rest tok #%d", s.Save())
 	}
-	rep1 := _AddExpr_Rest_rep
+	rep1 := _Additive_Rest_rep
 	rep1.Prec = pending.Prec(1)
-	if items, n, fieldErr, ok := grammar.ParseRepeated[AddTerm](s, grammar.TokenOptions{}, rep1); ok {
+	if items, n, fieldErr, ok := grammar.ParseRepeated[AdditiveTerm](s, grammar.TokenOptions{}, rep1); ok {
 		err = err.Merge(fieldErr)
 		r.Rest = items
 		itemCount += n
@@ -61,47 +65,52 @@ func (r *AddExpr) ParseRest(s *grammar.ParserState, pending grammar.PendingPrec)
 }
 
 var (
-	_AddTerm_Op_tok = grammar.TokenOptionsFromTag("op,+|op,-")
+	_AdditiveTerm_Op_tok = grammar.TokenOptionsFromTag("op,+|op,-")
 )
 
-// Parse implements grammar.Parser for AddTerm without reflection; it
+// Parse implements grammar.Parser for AdditiveTerm without reflection; it
 // does what grammar.Seq.Parse does.
-func (r *AddTerm) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err *grammar.ParseError) {
+func (r *AdditiveTerm) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err *grammar.ParseError) {
 	itemCount := 0
+	pending := s.TakePendingOr(7, true)
 	// Op Token
 	if s.Debug() {
 		s.Logf("  .Op tok #%d", s.Save())
 	}
-	if fieldErr := grammar.ParseWithOptions(&r.Op, s, _AddTerm_Op_tok); fieldErr != nil {
+	s.SetPrec(pending.Prec(0))
+	if fieldErr := grammar.ParseWithOptions(&r.Op, s, _AdditiveTerm_Op_tok); fieldErr != nil {
 		return err.Merge(fieldErr)
 	}
 	itemCount++
-	// Expr MulExpr
+	// X Expr
 	if s.Debug() {
-		s.Logf("  .Expr tok #%d", s.Save())
+		s.Logf("  .X tok #%d", s.Save())
 	}
-	if fieldErr := grammar.ParseWithOptions(&r.Expr, s, grammar.TokenOptions{}); fieldErr != nil {
+	s.SetPrec(pending.Prec(1))
+	if fieldErr := grammar.ParseWithOptions(&r.X, s, grammar.TokenOptions{}); fieldErr != nil {
 		return err.Merge(fieldErr)
 	}
 	itemCount++
 	if itemCount == 0 {
-		return grammar.EmptyMatchError(s, "AddTerm")
+		return grammar.EmptyMatchError(s, "AdditiveTerm")
 	}
 	return nil
 }
 
 var (
-	_AndExpr_Rest_rep = grammar.MustRepeatOptions[AndTerm]("", "", "", "", "")
+	_And_Rest_rep = grammar.MustRepeatOptions[AndTerm]("1-", "", "", "", "")
 )
 
-// Parse implements grammar.Parser for AndExpr without reflection; it
+// Parse implements grammar.Parser for And without reflection; it
 // does what grammar.Seq.Parse does.
-func (r *AndExpr) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err *grammar.ParseError) {
+func (r *And) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err *grammar.ParseError) {
 	itemCount := 0
-	// First NotExpr
+	pending := s.TakePendingOr(2, true)
+	// First Expr
 	if s.Debug() {
 		s.Logf("  .First tok #%d", s.Save())
 	}
+	s.SetPrec(pending.Prec(0))
 	if fieldErr := grammar.ParseWithOptions(&r.First, s, grammar.TokenOptions{}); fieldErr != nil {
 		return err.Merge(fieldErr)
 	}
@@ -110,7 +119,9 @@ func (r *AndExpr) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (
 	if s.Debug() {
 		s.Logf("  .Rest tok #%d", s.Save())
 	}
-	if items, n, fieldErr, ok := grammar.ParseRepeated[AndTerm](s, grammar.TokenOptions{}, _AndExpr_Rest_rep); ok {
+	rep1 := _And_Rest_rep
+	rep1.Prec = pending.Prec(1)
+	if items, n, fieldErr, ok := grammar.ParseRepeated[AndTerm](s, grammar.TokenOptions{}, rep1); ok {
 		err = err.Merge(fieldErr)
 		r.Rest = items
 		itemCount += n
@@ -118,20 +129,20 @@ func (r *AndExpr) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (
 		return err.Merge(fieldErr)
 	}
 	if itemCount == 0 {
-		return grammar.EmptyMatchError(s, "AndExpr")
+		return grammar.EmptyMatchError(s, "And")
 	}
 	return nil
 }
 
 // ParseRest parses the fields after the first, which is already set (the
 // left operand); the others are bound to the precedence level.
-func (r *AndExpr) ParseRest(s *grammar.ParserState, pending grammar.PendingPrec) (err *grammar.ParseError) {
+func (r *And) ParseRest(s *grammar.ParserState, pending grammar.PendingPrec) (err *grammar.ParseError) {
 	itemCount := 1
 	// Rest []AndTerm
 	if s.Debug() {
 		s.Logf("  .Rest tok #%d", s.Save())
 	}
-	rep1 := _AndExpr_Rest_rep
+	rep1 := _And_Rest_rep
 	rep1.Prec = pending.Prec(1)
 	if items, n, fieldErr, ok := grammar.ParseRepeated[AndTerm](s, grammar.TokenOptions{}, rep1); ok {
 		err = err.Merge(fieldErr)
@@ -152,19 +163,22 @@ var (
 // does what grammar.Seq.Parse does.
 func (r *AndTerm) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err *grammar.ParseError) {
 	itemCount := 0
+	pending := s.TakePendingOr(2, true)
 	// And grammar.Match
 	if s.Debug() {
 		s.Logf("  .And tok #%d", s.Save())
 	}
+	s.SetPrec(pending.Prec(0))
 	if fieldErr := grammar.ParseWithOptions(&r.And, s, _AndTerm_And_tok); fieldErr != nil {
 		return err.Merge(fieldErr)
 	}
 	itemCount++
-	// Expr NotExpr
+	// X Expr
 	if s.Debug() {
-		s.Logf("  .Expr tok #%d", s.Save())
+		s.Logf("  .X tok #%d", s.Save())
 	}
-	if fieldErr := grammar.ParseWithOptions(&r.Expr, s, grammar.TokenOptions{}); fieldErr != nil {
+	s.SetPrec(pending.Prec(1))
+	if fieldErr := grammar.ParseWithOptions(&r.X, s, grammar.TokenOptions{}); fieldErr != nil {
 		return err.Merge(fieldErr)
 	}
 	itemCount++
@@ -351,21 +365,29 @@ func (r *Atom) parseGeneral(s *grammar.ParserState) (err *grammar.ParseError) {
 }
 
 var (
-	_BetweenTerm_Not_tok     = grammar.TokenOptionsFromTag("kw,NOT")
-	_BetweenTerm_Not_first   = grammar.FirstSetOf[Token](_BetweenTerm_Not_tok)
-	_BetweenTerm_Between_tok = grammar.TokenOptionsFromTag("kw,BETWEEN")
-	_BetweenTerm_And_tok     = grammar.TokenOptionsFromTag("kw,AND")
+	_Between_Not_tok     = grammar.TokenOptionsFromTag("kw,NOT")
+	_Between_Not_first   = grammar.FirstSetOf[Token](_Between_Not_tok)
+	_Between_Between_tok = grammar.TokenOptionsFromTag("kw,BETWEEN")
+	_Between_And_tok     = grammar.TokenOptionsFromTag("kw,AND")
 )
 
-// Parse implements grammar.Parser for BetweenTerm without reflection; it
+// Parse implements grammar.Parser for Between without reflection; it
 // does what grammar.Seq.Parse does.
-func (r *BetweenTerm) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err *grammar.ParseError) {
+func (r *Between) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err *grammar.ParseError) {
 	itemCount := 0
+	// Lhs Expr
+	if s.Debug() {
+		s.Logf("  .Lhs tok #%d", s.Save())
+	}
+	if fieldErr := grammar.ParseWithOptions(&r.Lhs, s, grammar.TokenOptions{}); fieldErr != nil {
+		return err.Merge(fieldErr)
+	}
+	itemCount++
 	// Not *Token
 	if s.Debug() {
 		s.Logf("  .Not tok #%d", s.Save())
 	}
-	if item, fieldErr := grammar.ParseOptional[Token](s, _BetweenTerm_Not_tok, _BetweenTerm_Not_first); fieldErr != nil {
+	if item, fieldErr := grammar.ParseOptional[Token](s, _Between_Not_tok, _Between_Not_first); fieldErr != nil {
 		err = err.Merge(fieldErr)
 	} else {
 		r.Not = item
@@ -375,11 +397,11 @@ func (r *BetweenTerm) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOption
 	if s.Debug() {
 		s.Logf("  .Between tok #%d", s.Save())
 	}
-	if fieldErr := grammar.ParseWithOptions(&r.Between, s, _BetweenTerm_Between_tok); fieldErr != nil {
+	if fieldErr := grammar.ParseWithOptions(&r.Between, s, _Between_Between_tok); fieldErr != nil {
 		return err.Merge(fieldErr)
 	}
 	itemCount++
-	// Low RelExpr
+	// Low Expr
 	if s.Debug() {
 		s.Logf("  .Low tok #%d", s.Save())
 	}
@@ -391,11 +413,11 @@ func (r *BetweenTerm) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOption
 	if s.Debug() {
 		s.Logf("  .And tok #%d", s.Save())
 	}
-	if fieldErr := grammar.ParseWithOptions(&r.And, s, _BetweenTerm_And_tok); fieldErr != nil {
+	if fieldErr := grammar.ParseWithOptions(&r.And, s, _Between_And_tok); fieldErr != nil {
 		return err.Merge(fieldErr)
 	}
 	itemCount++
-	// High RelExpr
+	// High Expr
 	if s.Debug() {
 		s.Logf("  .High tok #%d", s.Save())
 	}
@@ -404,32 +426,91 @@ func (r *BetweenTerm) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOption
 	}
 	itemCount++
 	if itemCount == 0 {
-		return grammar.EmptyMatchError(s, "BetweenTerm")
+		return grammar.EmptyMatchError(s, "Between")
 	}
 	return nil
 }
 
+// ParseRest parses the fields after the first, which is already set (the
+// left operand); the others are bound to the precedence level.
+func (r *Between) ParseRest(s *grammar.ParserState, pending grammar.PendingPrec) (err *grammar.ParseError) {
+	itemCount := 1
+	// Not *Token
+	if s.Debug() {
+		s.Logf("  .Not tok #%d", s.Save())
+	}
+	s.SetPrec(pending.Prec(1))
+	if item, fieldErr := grammar.ParseOptional[Token](s, _Between_Not_tok, _Between_Not_first); fieldErr != nil {
+		err = err.Merge(fieldErr)
+	} else {
+		r.Not = item
+		itemCount++
+	}
+	// Between grammar.Match
+	if s.Debug() {
+		s.Logf("  .Between tok #%d", s.Save())
+	}
+	s.SetPrec(pending.Prec(2))
+	if fieldErr := grammar.ParseWithOptions(&r.Between, s, _Between_Between_tok); fieldErr != nil {
+		return err.Merge(fieldErr)
+	}
+	itemCount++
+	// Low Expr
+	if s.Debug() {
+		s.Logf("  .Low tok #%d", s.Save())
+	}
+	s.SetPrec(pending.Prec(3))
+	if fieldErr := grammar.ParseWithOptions(&r.Low, s, grammar.TokenOptions{}); fieldErr != nil {
+		return err.Merge(fieldErr)
+	}
+	itemCount++
+	// And grammar.Match
+	if s.Debug() {
+		s.Logf("  .And tok #%d", s.Save())
+	}
+	s.SetPrec(pending.Prec(4))
+	if fieldErr := grammar.ParseWithOptions(&r.And, s, _Between_And_tok); fieldErr != nil {
+		return err.Merge(fieldErr)
+	}
+	itemCount++
+	// High Expr
+	if s.Debug() {
+		s.Logf("  .High tok #%d", s.Save())
+	}
+	s.SetPrec(pending.Prec(5))
+	if fieldErr := grammar.ParseWithOptions(&r.High, s, grammar.TokenOptions{}); fieldErr != nil {
+		return err.Merge(fieldErr)
+	}
+	itemCount++
+	_ = itemCount
+	return nil
+}
+
 var (
-	_BitExpr_Rest_rep = grammar.MustRepeatOptions[BitTerm]("", "", "", "", "")
+	_BitwiseBinary_Rest_rep = grammar.MustRepeatOptions[BitwiseTerm]("1-", "", "", "", "")
 )
 
-// Parse implements grammar.Parser for BitExpr without reflection; it
+// Parse implements grammar.Parser for BitwiseBinary without reflection; it
 // does what grammar.Seq.Parse does.
-func (r *BitExpr) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err *grammar.ParseError) {
+func (r *BitwiseBinary) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err *grammar.ParseError) {
 	itemCount := 0
-	// First AddExpr
+	pending := s.TakePendingOr(6, true)
+	// First Expr
 	if s.Debug() {
 		s.Logf("  .First tok #%d", s.Save())
 	}
+	s.SetPrec(pending.Prec(0))
 	if fieldErr := grammar.ParseWithOptions(&r.First, s, grammar.TokenOptions{}); fieldErr != nil {
 		return err.Merge(fieldErr)
 	}
 	itemCount++
-	// Rest []BitTerm
+	// Rest []BitwiseTerm
 	if s.Debug() {
 		s.Logf("  .Rest tok #%d", s.Save())
 	}
-	if items, n, fieldErr, ok := grammar.ParseRepeated[BitTerm](s, grammar.TokenOptions{}, _BitExpr_Rest_rep); ok {
+	rep1 := _BitwiseBinary_Rest_rep
+	rep1.Prec = pending.Prec(1)
+	if items, n, fieldErr, ok := grammar.ParseRepeated[BitwiseTerm](s, grammar.TokenOptions{}, rep1); ok {
 		err = err.Merge(fieldErr)
 		r.Rest = items
 		itemCount += n
@@ -437,22 +518,22 @@ func (r *BitExpr) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (
 		return err.Merge(fieldErr)
 	}
 	if itemCount == 0 {
-		return grammar.EmptyMatchError(s, "BitExpr")
+		return grammar.EmptyMatchError(s, "BitwiseBinary")
 	}
 	return nil
 }
 
 // ParseRest parses the fields after the first, which is already set (the
 // left operand); the others are bound to the precedence level.
-func (r *BitExpr) ParseRest(s *grammar.ParserState, pending grammar.PendingPrec) (err *grammar.ParseError) {
+func (r *BitwiseBinary) ParseRest(s *grammar.ParserState, pending grammar.PendingPrec) (err *grammar.ParseError) {
 	itemCount := 1
-	// Rest []BitTerm
+	// Rest []BitwiseTerm
 	if s.Debug() {
 		s.Logf("  .Rest tok #%d", s.Save())
 	}
-	rep1 := _BitExpr_Rest_rep
+	rep1 := _BitwiseBinary_Rest_rep
 	rep1.Prec = pending.Prec(1)
-	if items, n, fieldErr, ok := grammar.ParseRepeated[BitTerm](s, grammar.TokenOptions{}, rep1); ok {
+	if items, n, fieldErr, ok := grammar.ParseRepeated[BitwiseTerm](s, grammar.TokenOptions{}, rep1); ok {
 		err = err.Merge(fieldErr)
 		r.Rest = items
 		itemCount += n
@@ -464,31 +545,67 @@ func (r *BitExpr) ParseRest(s *grammar.ParserState, pending grammar.PendingPrec)
 }
 
 var (
-	_BitTerm_Op_tok = grammar.TokenOptionsFromTag("op,&|bitor|op,<<|op,>>")
+	_BitwiseComplement_Tilde_tok = grammar.TokenOptionsFromTag("op,~")
 )
 
-// Parse implements grammar.Parser for BitTerm without reflection; it
+// Parse implements grammar.Parser for BitwiseComplement without reflection; it
 // does what grammar.Seq.Parse does.
-func (r *BitTerm) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err *grammar.ParseError) {
+func (r *BitwiseComplement) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err *grammar.ParseError) {
 	itemCount := 0
-	// Op Token
+	pending := s.TakePendingOr(10, true)
+	// Tilde grammar.Match
 	if s.Debug() {
-		s.Logf("  .Op tok #%d", s.Save())
+		s.Logf("  .Tilde tok #%d", s.Save())
 	}
-	if fieldErr := grammar.ParseWithOptions(&r.Op, s, _BitTerm_Op_tok); fieldErr != nil {
+	s.SetPrec(pending.Prec(0))
+	if fieldErr := grammar.ParseWithOptions(&r.Tilde, s, _BitwiseComplement_Tilde_tok); fieldErr != nil {
 		return err.Merge(fieldErr)
 	}
 	itemCount++
-	// Expr AddExpr
+	// X Expr
 	if s.Debug() {
-		s.Logf("  .Expr tok #%d", s.Save())
+		s.Logf("  .X tok #%d", s.Save())
 	}
-	if fieldErr := grammar.ParseWithOptions(&r.Expr, s, grammar.TokenOptions{}); fieldErr != nil {
+	s.SetPrec(pending.Prec(1))
+	if fieldErr := grammar.ParseWithOptions(&r.X, s, grammar.TokenOptions{}); fieldErr != nil {
 		return err.Merge(fieldErr)
 	}
 	itemCount++
 	if itemCount == 0 {
-		return grammar.EmptyMatchError(s, "BitTerm")
+		return grammar.EmptyMatchError(s, "BitwiseComplement")
+	}
+	return nil
+}
+
+var (
+	_BitwiseTerm_Op_tok = grammar.TokenOptionsFromTag("op,&|bitor|op,<<|op,>>")
+)
+
+// Parse implements grammar.Parser for BitwiseTerm without reflection; it
+// does what grammar.Seq.Parse does.
+func (r *BitwiseTerm) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err *grammar.ParseError) {
+	itemCount := 0
+	pending := s.TakePendingOr(6, true)
+	// Op Token
+	if s.Debug() {
+		s.Logf("  .Op tok #%d", s.Save())
+	}
+	s.SetPrec(pending.Prec(0))
+	if fieldErr := grammar.ParseWithOptions(&r.Op, s, _BitwiseTerm_Op_tok); fieldErr != nil {
+		return err.Merge(fieldErr)
+	}
+	itemCount++
+	// X Expr
+	if s.Debug() {
+		s.Logf("  .X tok #%d", s.Save())
+	}
+	s.SetPrec(pending.Prec(1))
+	if fieldErr := grammar.ParseWithOptions(&r.X, s, grammar.TokenOptions{}); fieldErr != nil {
+		return err.Merge(fieldErr)
+	}
+	itemCount++
+	if itemCount == 0 {
+		return grammar.EmptyMatchError(s, "BitwiseTerm")
 	}
 	return nil
 }
@@ -624,298 +741,29 @@ func (r *CastExpr) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) 
 }
 
 var (
-	_CmpExpr_Rest_rep = grammar.MustRepeatOptions[CmpTail]("", "", "", "", "")
+	_Collate_Collate_tok = grammar.TokenOptionsFromTag("kw,COLLATE")
 )
 
-// Parse implements grammar.Parser for CmpExpr without reflection; it
+// Parse implements grammar.Parser for Collate without reflection; it
 // does what grammar.Seq.Parse does.
-func (r *CmpExpr) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err *grammar.ParseError) {
+func (r *Collate) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err *grammar.ParseError) {
 	itemCount := 0
-	// First RelExpr
+	pending := s.TakePendingOr(11, true)
+	// Lhs Expr
 	if s.Debug() {
-		s.Logf("  .First tok #%d", s.Save())
+		s.Logf("  .Lhs tok #%d", s.Save())
 	}
-	if fieldErr := grammar.ParseWithOptions(&r.First, s, grammar.TokenOptions{}); fieldErr != nil {
+	s.SetPrec(pending.Prec(0))
+	if fieldErr := grammar.ParseWithOptions(&r.Lhs, s, grammar.TokenOptions{}); fieldErr != nil {
 		return err.Merge(fieldErr)
 	}
 	itemCount++
-	// Rest []CmpTail
-	if s.Debug() {
-		s.Logf("  .Rest tok #%d", s.Save())
-	}
-	if items, n, fieldErr, ok := grammar.ParseRepeated[CmpTail](s, grammar.TokenOptions{}, _CmpExpr_Rest_rep); ok {
-		err = err.Merge(fieldErr)
-		r.Rest = items
-		itemCount += n
-	} else {
-		return err.Merge(fieldErr)
-	}
-	if itemCount == 0 {
-		return grammar.EmptyMatchError(s, "CmpExpr")
-	}
-	return nil
-}
-
-// ParseRest parses the fields after the first, which is already set (the
-// left operand); the others are bound to the precedence level.
-func (r *CmpExpr) ParseRest(s *grammar.ParserState, pending grammar.PendingPrec) (err *grammar.ParseError) {
-	itemCount := 1
-	// Rest []CmpTail
-	if s.Debug() {
-		s.Logf("  .Rest tok #%d", s.Save())
-	}
-	rep1 := _CmpExpr_Rest_rep
-	rep1.Prec = pending.Prec(1)
-	if items, n, fieldErr, ok := grammar.ParseRepeated[CmpTail](s, grammar.TokenOptions{}, rep1); ok {
-		err = err.Merge(fieldErr)
-		r.Rest = items
-		itemCount += n
-	} else {
-		return err.Merge(fieldErr)
-	}
-	_ = itemCount
-	return nil
-}
-
-var (
-	_CmpTail_lr            = grammar.LeftRecursionOf[CmpTail]()
-	_CmpTail_plain         = grammar.PlainAlternatives[CmpTail]()
-	_CmpTail_Cmp_first     = grammar.FirstSetOf[CmpTerm](grammar.TokenOptions{})
-	_CmpTail_Is_first      = grammar.FirstSetOf[IsTerm](grammar.TokenOptions{})
-	_CmpTail_Null_tok      = grammar.TokenOptionsFromTag("kw,ISNULL|kw,NOTNULL")
-	_CmpTail_Null_first    = grammar.FirstSetOf[Token](_CmpTail_Null_tok)
-	_CmpTail_NotNull_first = grammar.FirstSetOf[NotNullTerm](grammar.TokenOptions{})
-	_CmpTail_Between_first = grammar.FirstSetOf[BetweenTerm](grammar.TokenOptions{})
-	_CmpTail_In_first      = grammar.FirstSetOf[InTerm](grammar.TokenOptions{})
-	_CmpTail_Like_first    = grammar.FirstSetOf[LikeTerm](grammar.TokenOptions{})
-)
-
-// Parse implements grammar.Parser for CmpTail without reflection; it
-// does what grammar.OneOf.Parse does.
-func (r *CmpTail) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err *grammar.ParseError) {
-	if !_CmpTail_plain {
-		return r.parseGeneral(s)
-	}
-	// Cmp *CmpTerm
-	if item, fieldErr := grammar.ParseOptional[CmpTerm](s, grammar.TokenOptions{}, _CmpTail_Cmp_first); fieldErr == nil {
-		r.Cmp = item
-		return nil
-	} else {
-		err = err.Merge(fieldErr)
-	}
-	// Is *IsTerm
-	if item, fieldErr := grammar.ParseOptional[IsTerm](s, grammar.TokenOptions{}, _CmpTail_Is_first); fieldErr == nil {
-		r.Is = item
-		return nil
-	} else {
-		err = err.Merge(fieldErr)
-	}
-	// Null *Token
-	if item, fieldErr := grammar.ParseOptional[Token](s, _CmpTail_Null_tok, _CmpTail_Null_first); fieldErr == nil {
-		r.Null = item
-		return nil
-	} else {
-		err = err.Merge(fieldErr)
-	}
-	// NotNull *NotNullTerm
-	if item, fieldErr := grammar.ParseOptional[NotNullTerm](s, grammar.TokenOptions{}, _CmpTail_NotNull_first); fieldErr == nil {
-		r.NotNull = item
-		return nil
-	} else {
-		err = err.Merge(fieldErr)
-	}
-	// Between *BetweenTerm
-	if item, fieldErr := grammar.ParseOptional[BetweenTerm](s, grammar.TokenOptions{}, _CmpTail_Between_first); fieldErr == nil {
-		r.Between = item
-		return nil
-	} else {
-		err = err.Merge(fieldErr)
-	}
-	// In *InTerm
-	if item, fieldErr := grammar.ParseOptional[InTerm](s, grammar.TokenOptions{}, _CmpTail_In_first); fieldErr == nil {
-		r.In = item
-		return nil
-	} else {
-		err = err.Merge(fieldErr)
-	}
-	// Like *LikeTerm
-	if item, fieldErr := grammar.ParseOptional[LikeTerm](s, grammar.TokenOptions{}, _CmpTail_Like_first); fieldErr == nil {
-		r.Like = item
-		return nil
-	} else {
-		err = err.Merge(fieldErr)
-	}
-	return err
-}
-
-// parseGeneral is Parse for when an alternative is left recursive or has a
-// precedence.
-func (r *CmpTail) parseGeneral(s *grammar.ParserState) (err *grammar.ParseError) {
-	a := grammar.AlternativesOf[CmpTail](s)
-	defer a.Done()
-	// Cmp *CmpTerm
-	if ok, tryErr := a.Try(_CmpTail_lr[0], _CmpTail_Cmp_first); !ok {
-		err = err.Merge(tryErr)
-	} else if item, fieldErr := grammar.ParseAlternative[CmpTerm](s, &a, _CmpTail_lr[0], grammar.TokenOptions{}); fieldErr == nil {
-		r.Cmp = item
-		return nil
-	} else {
-		err = err.Merge(fieldErr)
-	}
-	// Is *IsTerm
-	if ok, tryErr := a.Try(_CmpTail_lr[1], _CmpTail_Is_first); !ok {
-		err = err.Merge(tryErr)
-	} else if item, fieldErr := grammar.ParseAlternative[IsTerm](s, &a, _CmpTail_lr[1], grammar.TokenOptions{}); fieldErr == nil {
-		r.Is = item
-		return nil
-	} else {
-		err = err.Merge(fieldErr)
-	}
-	// Null *Token
-	if ok, tryErr := a.Try(_CmpTail_lr[2], _CmpTail_Null_first); !ok {
-		err = err.Merge(tryErr)
-	} else if item, fieldErr := grammar.ParseAlternative[Token](s, &a, _CmpTail_lr[2], _CmpTail_Null_tok); fieldErr == nil {
-		r.Null = item
-		return nil
-	} else {
-		err = err.Merge(fieldErr)
-	}
-	// NotNull *NotNullTerm
-	if ok, tryErr := a.Try(_CmpTail_lr[3], _CmpTail_NotNull_first); !ok {
-		err = err.Merge(tryErr)
-	} else if item, fieldErr := grammar.ParseAlternative[NotNullTerm](s, &a, _CmpTail_lr[3], grammar.TokenOptions{}); fieldErr == nil {
-		r.NotNull = item
-		return nil
-	} else {
-		err = err.Merge(fieldErr)
-	}
-	// Between *BetweenTerm
-	if ok, tryErr := a.Try(_CmpTail_lr[4], _CmpTail_Between_first); !ok {
-		err = err.Merge(tryErr)
-	} else if item, fieldErr := grammar.ParseAlternative[BetweenTerm](s, &a, _CmpTail_lr[4], grammar.TokenOptions{}); fieldErr == nil {
-		r.Between = item
-		return nil
-	} else {
-		err = err.Merge(fieldErr)
-	}
-	// In *InTerm
-	if ok, tryErr := a.Try(_CmpTail_lr[5], _CmpTail_In_first); !ok {
-		err = err.Merge(tryErr)
-	} else if item, fieldErr := grammar.ParseAlternative[InTerm](s, &a, _CmpTail_lr[5], grammar.TokenOptions{}); fieldErr == nil {
-		r.In = item
-		return nil
-	} else {
-		err = err.Merge(fieldErr)
-	}
-	// Like *LikeTerm
-	if ok, tryErr := a.Try(_CmpTail_lr[6], _CmpTail_Like_first); !ok {
-		err = err.Merge(tryErr)
-	} else if item, fieldErr := grammar.ParseAlternative[LikeTerm](s, &a, _CmpTail_lr[6], grammar.TokenOptions{}); fieldErr == nil {
-		r.Like = item
-		return nil
-	} else {
-		err = err.Merge(fieldErr)
-	}
-	return err
-}
-
-var (
-	_CmpTerm_Op_tok = grammar.TokenOptionsFromTag("op,=|op,==|op,!=|op,<>")
-)
-
-// Parse implements grammar.Parser for CmpTerm without reflection; it
-// does what grammar.Seq.Parse does.
-func (r *CmpTerm) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err *grammar.ParseError) {
-	itemCount := 0
-	// Op Token
-	if s.Debug() {
-		s.Logf("  .Op tok #%d", s.Save())
-	}
-	if fieldErr := grammar.ParseWithOptions(&r.Op, s, _CmpTerm_Op_tok); fieldErr != nil {
-		return err.Merge(fieldErr)
-	}
-	itemCount++
-	// Expr RelExpr
-	if s.Debug() {
-		s.Logf("  .Expr tok #%d", s.Save())
-	}
-	if fieldErr := grammar.ParseWithOptions(&r.Expr, s, grammar.TokenOptions{}); fieldErr != nil {
-		return err.Merge(fieldErr)
-	}
-	itemCount++
-	if itemCount == 0 {
-		return grammar.EmptyMatchError(s, "CmpTerm")
-	}
-	return nil
-}
-
-var (
-	_CollateExpr_Collate_rep = grammar.MustRepeatOptions[Collation]("", "", "", "", "")
-)
-
-// Parse implements grammar.Parser for CollateExpr without reflection; it
-// does what grammar.Seq.Parse does.
-func (r *CollateExpr) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err *grammar.ParseError) {
-	itemCount := 0
-	// Atom Atom
-	if s.Debug() {
-		s.Logf("  .Atom tok #%d", s.Save())
-	}
-	if fieldErr := grammar.ParseWithOptions(&r.Atom, s, grammar.TokenOptions{}); fieldErr != nil {
-		return err.Merge(fieldErr)
-	}
-	itemCount++
-	// Collate []Collation
-	if s.Debug() {
-		s.Logf("  .Collate tok #%d", s.Save())
-	}
-	if items, n, fieldErr, ok := grammar.ParseRepeated[Collation](s, grammar.TokenOptions{}, _CollateExpr_Collate_rep); ok {
-		err = err.Merge(fieldErr)
-		r.Collate = items
-		itemCount += n
-	} else {
-		return err.Merge(fieldErr)
-	}
-	if itemCount == 0 {
-		return grammar.EmptyMatchError(s, "CollateExpr")
-	}
-	return nil
-}
-
-// ParseRest parses the fields after the first, which is already set (the
-// left operand); the others are bound to the precedence level.
-func (r *CollateExpr) ParseRest(s *grammar.ParserState, pending grammar.PendingPrec) (err *grammar.ParseError) {
-	itemCount := 1
-	// Collate []Collation
-	if s.Debug() {
-		s.Logf("  .Collate tok #%d", s.Save())
-	}
-	rep1 := _CollateExpr_Collate_rep
-	rep1.Prec = pending.Prec(1)
-	if items, n, fieldErr, ok := grammar.ParseRepeated[Collation](s, grammar.TokenOptions{}, rep1); ok {
-		err = err.Merge(fieldErr)
-		r.Collate = items
-		itemCount += n
-	} else {
-		return err.Merge(fieldErr)
-	}
-	_ = itemCount
-	return nil
-}
-
-var (
-	_Collation_Collate_tok = grammar.TokenOptionsFromTag("kw,COLLATE")
-)
-
-// Parse implements grammar.Parser for Collation without reflection; it
-// does what grammar.Seq.Parse does.
-func (r *Collation) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err *grammar.ParseError) {
-	itemCount := 0
 	// Collate grammar.Match
 	if s.Debug() {
 		s.Logf("  .Collate tok #%d", s.Save())
 	}
-	if fieldErr := grammar.ParseWithOptions(&r.Collate, s, _Collation_Collate_tok); fieldErr != nil {
+	s.SetPrec(pending.Prec(1))
+	if fieldErr := grammar.ParseWithOptions(&r.Collate, s, _Collate_Collate_tok); fieldErr != nil {
 		return err.Merge(fieldErr)
 	}
 	itemCount++
@@ -923,13 +771,40 @@ func (r *Collation) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions)
 	if s.Debug() {
 		s.Logf("  .Name tok #%d", s.Save())
 	}
+	s.SetPrec(pending.Prec(2))
 	if fieldErr := grammar.ParseWithOptions(&r.Name, s, grammar.TokenOptions{}); fieldErr != nil {
 		return err.Merge(fieldErr)
 	}
 	itemCount++
 	if itemCount == 0 {
-		return grammar.EmptyMatchError(s, "Collation")
+		return grammar.EmptyMatchError(s, "Collate")
 	}
+	return nil
+}
+
+// ParseRest parses the fields after the first, which is already set (the
+// left operand); the others are bound to the precedence level.
+func (r *Collate) ParseRest(s *grammar.ParserState, pending grammar.PendingPrec) (err *grammar.ParseError) {
+	itemCount := 1
+	// Collate grammar.Match
+	if s.Debug() {
+		s.Logf("  .Collate tok #%d", s.Save())
+	}
+	s.SetPrec(pending.Prec(1))
+	if fieldErr := grammar.ParseWithOptions(&r.Collate, s, _Collate_Collate_tok); fieldErr != nil {
+		return err.Merge(fieldErr)
+	}
+	itemCount++
+	// Name Name
+	if s.Debug() {
+		s.Logf("  .Name tok #%d", s.Save())
+	}
+	s.SetPrec(pending.Prec(2))
+	if fieldErr := grammar.ParseWithOptions(&r.Name, s, grammar.TokenOptions{}); fieldErr != nil {
+		return err.Merge(fieldErr)
+	}
+	itemCount++
+	_ = itemCount
 	return nil
 }
 
@@ -959,26 +834,30 @@ func (r *ColumnRef) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions)
 }
 
 var (
-	_ConcatExpr_Rest_rep = grammar.MustRepeatOptions[ConcatTerm]("", "", "", "", "")
+	_Concatenation_Rest_rep = grammar.MustRepeatOptions[ConcatenationTerm]("1-", "", "", "", "")
 )
 
-// Parse implements grammar.Parser for ConcatExpr without reflection; it
+// Parse implements grammar.Parser for Concatenation without reflection; it
 // does what grammar.Seq.Parse does.
-func (r *ConcatExpr) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err *grammar.ParseError) {
+func (r *Concatenation) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err *grammar.ParseError) {
 	itemCount := 0
-	// First UnaryExpr
+	pending := s.TakePendingOr(9, true)
+	// First Expr
 	if s.Debug() {
 		s.Logf("  .First tok #%d", s.Save())
 	}
+	s.SetPrec(pending.Prec(0))
 	if fieldErr := grammar.ParseWithOptions(&r.First, s, grammar.TokenOptions{}); fieldErr != nil {
 		return err.Merge(fieldErr)
 	}
 	itemCount++
-	// Rest []ConcatTerm
+	// Rest []ConcatenationTerm
 	if s.Debug() {
 		s.Logf("  .Rest tok #%d", s.Save())
 	}
-	if items, n, fieldErr, ok := grammar.ParseRepeated[ConcatTerm](s, grammar.TokenOptions{}, _ConcatExpr_Rest_rep); ok {
+	rep1 := _Concatenation_Rest_rep
+	rep1.Prec = pending.Prec(1)
+	if items, n, fieldErr, ok := grammar.ParseRepeated[ConcatenationTerm](s, grammar.TokenOptions{}, rep1); ok {
 		err = err.Merge(fieldErr)
 		r.Rest = items
 		itemCount += n
@@ -986,22 +865,22 @@ func (r *ConcatExpr) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions
 		return err.Merge(fieldErr)
 	}
 	if itemCount == 0 {
-		return grammar.EmptyMatchError(s, "ConcatExpr")
+		return grammar.EmptyMatchError(s, "Concatenation")
 	}
 	return nil
 }
 
 // ParseRest parses the fields after the first, which is already set (the
 // left operand); the others are bound to the precedence level.
-func (r *ConcatExpr) ParseRest(s *grammar.ParserState, pending grammar.PendingPrec) (err *grammar.ParseError) {
+func (r *Concatenation) ParseRest(s *grammar.ParserState, pending grammar.PendingPrec) (err *grammar.ParseError) {
 	itemCount := 1
-	// Rest []ConcatTerm
+	// Rest []ConcatenationTerm
 	if s.Debug() {
 		s.Logf("  .Rest tok #%d", s.Save())
 	}
-	rep1 := _ConcatExpr_Rest_rep
+	rep1 := _Concatenation_Rest_rep
 	rep1.Prec = pending.Prec(1)
-	if items, n, fieldErr, ok := grammar.ParseRepeated[ConcatTerm](s, grammar.TokenOptions{}, rep1); ok {
+	if items, n, fieldErr, ok := grammar.ParseRepeated[ConcatenationTerm](s, grammar.TokenOptions{}, rep1); ok {
 		err = err.Merge(fieldErr)
 		r.Rest = items
 		itemCount += n
@@ -1013,31 +892,34 @@ func (r *ConcatExpr) ParseRest(s *grammar.ParserState, pending grammar.PendingPr
 }
 
 var (
-	_ConcatTerm_Op_tok = grammar.TokenOptionsFromTag("concat|op,->|op,->>")
+	_ConcatenationTerm_Op_tok = grammar.TokenOptionsFromTag("concat|op,->|op,->>")
 )
 
-// Parse implements grammar.Parser for ConcatTerm without reflection; it
+// Parse implements grammar.Parser for ConcatenationTerm without reflection; it
 // does what grammar.Seq.Parse does.
-func (r *ConcatTerm) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err *grammar.ParseError) {
+func (r *ConcatenationTerm) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err *grammar.ParseError) {
 	itemCount := 0
+	pending := s.TakePendingOr(9, true)
 	// Op Token
 	if s.Debug() {
 		s.Logf("  .Op tok #%d", s.Save())
 	}
-	if fieldErr := grammar.ParseWithOptions(&r.Op, s, _ConcatTerm_Op_tok); fieldErr != nil {
+	s.SetPrec(pending.Prec(0))
+	if fieldErr := grammar.ParseWithOptions(&r.Op, s, _ConcatenationTerm_Op_tok); fieldErr != nil {
 		return err.Merge(fieldErr)
 	}
 	itemCount++
-	// Expr UnaryExpr
+	// X Expr
 	if s.Debug() {
-		s.Logf("  .Expr tok #%d", s.Save())
+		s.Logf("  .X tok #%d", s.Save())
 	}
-	if fieldErr := grammar.ParseWithOptions(&r.Expr, s, grammar.TokenOptions{}); fieldErr != nil {
+	s.SetPrec(pending.Prec(1))
+	if fieldErr := grammar.ParseWithOptions(&r.X, s, grammar.TokenOptions{}); fieldErr != nil {
 		return err.Merge(fieldErr)
 	}
 	itemCount++
 	if itemCount == 0 {
-		return grammar.EmptyMatchError(s, "ConcatTerm")
+		return grammar.EmptyMatchError(s, "ConcatenationTerm")
 	}
 	return nil
 }
@@ -1104,6 +986,70 @@ func (r *ElseClause) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions
 }
 
 var (
+	_Equality_Op_tok = grammar.TokenOptionsFromTag("op,=|op,==|op,!=|op,<>")
+)
+
+// Parse implements grammar.Parser for Equality without reflection; it
+// does what grammar.Seq.Parse does.
+func (r *Equality) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err *grammar.ParseError) {
+	itemCount := 0
+	// Lhs Expr
+	if s.Debug() {
+		s.Logf("  .Lhs tok #%d", s.Save())
+	}
+	if fieldErr := grammar.ParseWithOptions(&r.Lhs, s, grammar.TokenOptions{}); fieldErr != nil {
+		return err.Merge(fieldErr)
+	}
+	itemCount++
+	// Op Token
+	if s.Debug() {
+		s.Logf("  .Op tok #%d", s.Save())
+	}
+	if fieldErr := grammar.ParseWithOptions(&r.Op, s, _Equality_Op_tok); fieldErr != nil {
+		return err.Merge(fieldErr)
+	}
+	itemCount++
+	// Rhs Expr
+	if s.Debug() {
+		s.Logf("  .Rhs tok #%d", s.Save())
+	}
+	if fieldErr := grammar.ParseWithOptions(&r.Rhs, s, grammar.TokenOptions{}); fieldErr != nil {
+		return err.Merge(fieldErr)
+	}
+	itemCount++
+	if itemCount == 0 {
+		return grammar.EmptyMatchError(s, "Equality")
+	}
+	return nil
+}
+
+// ParseRest parses the fields after the first, which is already set (the
+// left operand); the others are bound to the precedence level.
+func (r *Equality) ParseRest(s *grammar.ParserState, pending grammar.PendingPrec) (err *grammar.ParseError) {
+	itemCount := 1
+	// Op Token
+	if s.Debug() {
+		s.Logf("  .Op tok #%d", s.Save())
+	}
+	s.SetPrec(pending.Prec(1))
+	if fieldErr := grammar.ParseWithOptions(&r.Op, s, _Equality_Op_tok); fieldErr != nil {
+		return err.Merge(fieldErr)
+	}
+	itemCount++
+	// Rhs Expr
+	if s.Debug() {
+		s.Logf("  .Rhs tok #%d", s.Save())
+	}
+	s.SetPrec(pending.Prec(2))
+	if fieldErr := grammar.ParseWithOptions(&r.Rhs, s, grammar.TokenOptions{}); fieldErr != nil {
+		return err.Merge(fieldErr)
+	}
+	itemCount++
+	_ = itemCount
+	return nil
+}
+
+var (
 	_EscapeClause_Escape_tok = grammar.TokenOptionsFromTag("kw,ESCAPE")
 )
 
@@ -1111,19 +1057,22 @@ var (
 // does what grammar.Seq.Parse does.
 func (r *EscapeClause) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err *grammar.ParseError) {
 	itemCount := 0
+	pending := s.TakePendingOr(4, true)
 	// Escape grammar.Match
 	if s.Debug() {
 		s.Logf("  .Escape tok #%d", s.Save())
 	}
+	s.SetPrec(pending.Prec(0))
 	if fieldErr := grammar.ParseWithOptions(&r.Escape, s, _EscapeClause_Escape_tok); fieldErr != nil {
 		return err.Merge(fieldErr)
 	}
 	itemCount++
-	// Expr RelExpr
+	// X Expr
 	if s.Debug() {
-		s.Logf("  .Expr tok #%d", s.Save())
+		s.Logf("  .X tok #%d", s.Save())
 	}
-	if fieldErr := grammar.ParseWithOptions(&r.Expr, s, grammar.TokenOptions{}); fieldErr != nil {
+	s.SetPrec(pending.Prec(1))
+	if fieldErr := grammar.ParseWithOptions(&r.X, s, grammar.TokenOptions{}); fieldErr != nil {
 		return err.Merge(fieldErr)
 	}
 	itemCount++
@@ -1160,60 +1109,6 @@ func (r *ExistsExpr) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions
 	if itemCount == 0 {
 		return grammar.EmptyMatchError(s, "ExistsExpr")
 	}
-	return nil
-}
-
-var (
-	_Expr_Rest_rep = grammar.MustRepeatOptions[OrTerm]("", "", "", "", "")
-)
-
-// Parse implements grammar.Parser for Expr without reflection; it
-// does what grammar.Seq.Parse does.
-func (r *Expr) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err *grammar.ParseError) {
-	itemCount := 0
-	// First AndExpr
-	if s.Debug() {
-		s.Logf("  .First tok #%d", s.Save())
-	}
-	if fieldErr := grammar.ParseWithOptions(&r.First, s, grammar.TokenOptions{}); fieldErr != nil {
-		return err.Merge(fieldErr)
-	}
-	itemCount++
-	// Rest []OrTerm
-	if s.Debug() {
-		s.Logf("  .Rest tok #%d", s.Save())
-	}
-	if items, n, fieldErr, ok := grammar.ParseRepeated[OrTerm](s, grammar.TokenOptions{}, _Expr_Rest_rep); ok {
-		err = err.Merge(fieldErr)
-		r.Rest = items
-		itemCount += n
-	} else {
-		return err.Merge(fieldErr)
-	}
-	if itemCount == 0 {
-		return grammar.EmptyMatchError(s, "Expr")
-	}
-	return nil
-}
-
-// ParseRest parses the fields after the first, which is already set (the
-// left operand); the others are bound to the precedence level.
-func (r *Expr) ParseRest(s *grammar.ParserState, pending grammar.PendingPrec) (err *grammar.ParseError) {
-	itemCount := 1
-	// Rest []OrTerm
-	if s.Debug() {
-		s.Logf("  .Rest tok #%d", s.Save())
-	}
-	rep1 := _Expr_Rest_rep
-	rep1.Prec = pending.Prec(1)
-	if items, n, fieldErr, ok := grammar.ParseRepeated[OrTerm](s, grammar.TokenOptions{}, rep1); ok {
-		err = err.Merge(fieldErr)
-		r.Rest = items
-		itemCount += n
-	} else {
-		return err.Merge(fieldErr)
-	}
-	_ = itemCount
 	return nil
 }
 
@@ -1468,6 +1363,93 @@ func (r *FuncCall) ParseRest(s *grammar.ParserState, pending grammar.PendingPrec
 }
 
 var (
+	_In_Not_tok   = grammar.TokenOptionsFromTag("kw,NOT")
+	_In_Not_first = grammar.FirstSetOf[Token](_In_Not_tok)
+	_In_In_tok    = grammar.TokenOptionsFromTag("kw,IN")
+)
+
+// Parse implements grammar.Parser for In without reflection; it
+// does what grammar.Seq.Parse does.
+func (r *In) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err *grammar.ParseError) {
+	itemCount := 0
+	// Lhs Expr
+	if s.Debug() {
+		s.Logf("  .Lhs tok #%d", s.Save())
+	}
+	if fieldErr := grammar.ParseWithOptions(&r.Lhs, s, grammar.TokenOptions{}); fieldErr != nil {
+		return err.Merge(fieldErr)
+	}
+	itemCount++
+	// Not *Token
+	if s.Debug() {
+		s.Logf("  .Not tok #%d", s.Save())
+	}
+	if item, fieldErr := grammar.ParseOptional[Token](s, _In_Not_tok, _In_Not_first); fieldErr != nil {
+		err = err.Merge(fieldErr)
+	} else {
+		r.Not = item
+		itemCount++
+	}
+	// In grammar.Match
+	if s.Debug() {
+		s.Logf("  .In tok #%d", s.Save())
+	}
+	if fieldErr := grammar.ParseWithOptions(&r.In, s, _In_In_tok); fieldErr != nil {
+		return err.Merge(fieldErr)
+	}
+	itemCount++
+	// Target InTarget
+	if s.Debug() {
+		s.Logf("  .Target tok #%d", s.Save())
+	}
+	if fieldErr := grammar.ParseWithOptions(&r.Target, s, grammar.TokenOptions{}); fieldErr != nil {
+		return err.Merge(fieldErr)
+	}
+	itemCount++
+	if itemCount == 0 {
+		return grammar.EmptyMatchError(s, "In")
+	}
+	return nil
+}
+
+// ParseRest parses the fields after the first, which is already set (the
+// left operand); the others are bound to the precedence level.
+func (r *In) ParseRest(s *grammar.ParserState, pending grammar.PendingPrec) (err *grammar.ParseError) {
+	itemCount := 1
+	// Not *Token
+	if s.Debug() {
+		s.Logf("  .Not tok #%d", s.Save())
+	}
+	s.SetPrec(pending.Prec(1))
+	if item, fieldErr := grammar.ParseOptional[Token](s, _In_Not_tok, _In_Not_first); fieldErr != nil {
+		err = err.Merge(fieldErr)
+	} else {
+		r.Not = item
+		itemCount++
+	}
+	// In grammar.Match
+	if s.Debug() {
+		s.Logf("  .In tok #%d", s.Save())
+	}
+	s.SetPrec(pending.Prec(2))
+	if fieldErr := grammar.ParseWithOptions(&r.In, s, _In_In_tok); fieldErr != nil {
+		return err.Merge(fieldErr)
+	}
+	itemCount++
+	// Target InTarget
+	if s.Debug() {
+		s.Logf("  .Target tok #%d", s.Save())
+	}
+	s.SetPrec(pending.Prec(3))
+	if fieldErr := grammar.ParseWithOptions(&r.Target, s, grammar.TokenOptions{}); fieldErr != nil {
+		return err.Merge(fieldErr)
+	}
+	itemCount++
+	_ = itemCount
+	return nil
+}
+
+var (
 	_InList_Open_tok  = grammar.TokenOptionsFromTag("op,(")
 	_InList_Exprs_rep = grammar.MustRepeatOptions[Expr]("", "op,,", "", "", "")
 	_InList_Close_tok = grammar.TokenOptionsFromTag("op,)")
@@ -1584,63 +1566,29 @@ func (r *InTarget) parseGeneral(s *grammar.ParserState) (err *grammar.ParseError
 }
 
 var (
-	_InTerm_Not_tok   = grammar.TokenOptionsFromTag("kw,NOT")
-	_InTerm_Not_first = grammar.FirstSetOf[Token](_InTerm_Not_tok)
-	_InTerm_In_tok    = grammar.TokenOptionsFromTag("kw,IN")
+	_Is_Is_tok         = grammar.TokenOptionsFromTag("kw,IS")
+	_Is_Not_tok        = grammar.TokenOptionsFromTag("kw,NOT")
+	_Is_Not_first      = grammar.FirstSetOf[Token](_Is_Not_tok)
+	_Is_Distinct_first = grammar.FirstSetOf[DistinctFrom](grammar.TokenOptions{})
 )
 
-// Parse implements grammar.Parser for InTerm without reflection; it
+// Parse implements grammar.Parser for Is without reflection; it
 // does what grammar.Seq.Parse does.
-func (r *InTerm) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err *grammar.ParseError) {
+func (r *Is) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err *grammar.ParseError) {
 	itemCount := 0
-	// Not *Token
+	// Lhs Expr
 	if s.Debug() {
-		s.Logf("  .Not tok #%d", s.Save())
+		s.Logf("  .Lhs tok #%d", s.Save())
 	}
-	if item, fieldErr := grammar.ParseOptional[Token](s, _InTerm_Not_tok, _InTerm_Not_first); fieldErr != nil {
-		err = err.Merge(fieldErr)
-	} else {
-		r.Not = item
-		itemCount++
-	}
-	// In grammar.Match
-	if s.Debug() {
-		s.Logf("  .In tok #%d", s.Save())
-	}
-	if fieldErr := grammar.ParseWithOptions(&r.In, s, _InTerm_In_tok); fieldErr != nil {
+	if fieldErr := grammar.ParseWithOptions(&r.Lhs, s, grammar.TokenOptions{}); fieldErr != nil {
 		return err.Merge(fieldErr)
 	}
 	itemCount++
-	// Target InTarget
-	if s.Debug() {
-		s.Logf("  .Target tok #%d", s.Save())
-	}
-	if fieldErr := grammar.ParseWithOptions(&r.Target, s, grammar.TokenOptions{}); fieldErr != nil {
-		return err.Merge(fieldErr)
-	}
-	itemCount++
-	if itemCount == 0 {
-		return grammar.EmptyMatchError(s, "InTerm")
-	}
-	return nil
-}
-
-var (
-	_IsTerm_Is_tok         = grammar.TokenOptionsFromTag("kw,IS")
-	_IsTerm_Not_tok        = grammar.TokenOptionsFromTag("kw,NOT")
-	_IsTerm_Not_first      = grammar.FirstSetOf[Token](_IsTerm_Not_tok)
-	_IsTerm_Distinct_first = grammar.FirstSetOf[DistinctFrom](grammar.TokenOptions{})
-)
-
-// Parse implements grammar.Parser for IsTerm without reflection; it
-// does what grammar.Seq.Parse does.
-func (r *IsTerm) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err *grammar.ParseError) {
-	itemCount := 0
 	// Is grammar.Match
 	if s.Debug() {
 		s.Logf("  .Is tok #%d", s.Save())
 	}
-	if fieldErr := grammar.ParseWithOptions(&r.Is, s, _IsTerm_Is_tok); fieldErr != nil {
+	if fieldErr := grammar.ParseWithOptions(&r.Is, s, _Is_Is_tok); fieldErr != nil {
 		return err.Merge(fieldErr)
 	}
 	itemCount++
@@ -1648,7 +1596,7 @@ func (r *IsTerm) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (e
 	if s.Debug() {
 		s.Logf("  .Not tok #%d", s.Save())
 	}
-	if item, fieldErr := grammar.ParseOptional[Token](s, _IsTerm_Not_tok, _IsTerm_Not_first); fieldErr != nil {
+	if item, fieldErr := grammar.ParseOptional[Token](s, _Is_Not_tok, _Is_Not_first); fieldErr != nil {
 		err = err.Merge(fieldErr)
 	} else {
 		r.Not = item
@@ -1658,76 +1606,71 @@ func (r *IsTerm) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (e
 	if s.Debug() {
 		s.Logf("  .Distinct tok #%d", s.Save())
 	}
-	if item, fieldErr := grammar.ParseOptional[DistinctFrom](s, grammar.TokenOptions{}, _IsTerm_Distinct_first); fieldErr != nil {
+	if item, fieldErr := grammar.ParseOptional[DistinctFrom](s, grammar.TokenOptions{}, _Is_Distinct_first); fieldErr != nil {
 		err = err.Merge(fieldErr)
 	} else {
 		r.Distinct = item
 		itemCount++
 	}
-	// Expr RelExpr
+	// Rhs Expr
 	if s.Debug() {
-		s.Logf("  .Expr tok #%d", s.Save())
+		s.Logf("  .Rhs tok #%d", s.Save())
 	}
-	if fieldErr := grammar.ParseWithOptions(&r.Expr, s, grammar.TokenOptions{}); fieldErr != nil {
+	if fieldErr := grammar.ParseWithOptions(&r.Rhs, s, grammar.TokenOptions{}); fieldErr != nil {
 		return err.Merge(fieldErr)
 	}
 	itemCount++
 	if itemCount == 0 {
-		return grammar.EmptyMatchError(s, "IsTerm")
+		return grammar.EmptyMatchError(s, "Is")
 	}
 	return nil
 }
 
-var (
-	_LikeTerm_Not_tok      = grammar.TokenOptionsFromTag("kw,NOT")
-	_LikeTerm_Not_first    = grammar.FirstSetOf[Token](_LikeTerm_Not_tok)
-	_LikeTerm_Op_tok       = grammar.TokenOptionsFromTag("kw,LIKE|kw,GLOB|kw,REGEXP|kw,MATCH")
-	_LikeTerm_Escape_first = grammar.FirstSetOf[EscapeClause](grammar.TokenOptions{})
-)
-
-// Parse implements grammar.Parser for LikeTerm without reflection; it
-// does what grammar.Seq.Parse does.
-func (r *LikeTerm) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err *grammar.ParseError) {
-	itemCount := 0
+// ParseRest parses the fields after the first, which is already set (the
+// left operand); the others are bound to the precedence level.
+func (r *Is) ParseRest(s *grammar.ParserState, pending grammar.PendingPrec) (err *grammar.ParseError) {
+	itemCount := 1
+	// Is grammar.Match
+	if s.Debug() {
+		s.Logf("  .Is tok #%d", s.Save())
+	}
+	s.SetPrec(pending.Prec(1))
+	if fieldErr := grammar.ParseWithOptions(&r.Is, s, _Is_Is_tok); fieldErr != nil {
+		return err.Merge(fieldErr)
+	}
+	itemCount++
 	// Not *Token
 	if s.Debug() {
 		s.Logf("  .Not tok #%d", s.Save())
 	}
-	if item, fieldErr := grammar.ParseOptional[Token](s, _LikeTerm_Not_tok, _LikeTerm_Not_first); fieldErr != nil {
+	s.SetPrec(pending.Prec(2))
+	if item, fieldErr := grammar.ParseOptional[Token](s, _Is_Not_tok, _Is_Not_first); fieldErr != nil {
 		err = err.Merge(fieldErr)
 	} else {
 		r.Not = item
 		itemCount++
 	}
-	// Op Token
+	// Distinct *DistinctFrom
 	if s.Debug() {
-		s.Logf("  .Op tok #%d", s.Save())
+		s.Logf("  .Distinct tok #%d", s.Save())
 	}
-	if fieldErr := grammar.ParseWithOptions(&r.Op, s, _LikeTerm_Op_tok); fieldErr != nil {
-		return err.Merge(fieldErr)
-	}
-	itemCount++
-	// Pattern RelExpr
-	if s.Debug() {
-		s.Logf("  .Pattern tok #%d", s.Save())
-	}
-	if fieldErr := grammar.ParseWithOptions(&r.Pattern, s, grammar.TokenOptions{}); fieldErr != nil {
-		return err.Merge(fieldErr)
-	}
-	itemCount++
-	// Escape *EscapeClause
-	if s.Debug() {
-		s.Logf("  .Escape tok #%d", s.Save())
-	}
-	if item, fieldErr := grammar.ParseOptional[EscapeClause](s, grammar.TokenOptions{}, _LikeTerm_Escape_first); fieldErr != nil {
+	s.SetPrec(pending.Prec(3))
+	if item, fieldErr := grammar.ParseOptional[DistinctFrom](s, grammar.TokenOptions{}, _Is_Distinct_first); fieldErr != nil {
 		err = err.Merge(fieldErr)
 	} else {
-		r.Escape = item
+		r.Distinct = item
 		itemCount++
 	}
-	if itemCount == 0 {
-		return grammar.EmptyMatchError(s, "LikeTerm")
+	// Rhs Expr
+	if s.Debug() {
+		s.Logf("  .Rhs tok #%d", s.Save())
 	}
+	s.SetPrec(pending.Prec(4))
+	if fieldErr := grammar.ParseWithOptions(&r.Rhs, s, grammar.TokenOptions{}); fieldErr != nil {
+		return err.Merge(fieldErr)
+	}
+	itemCount++
+	_ = itemCount
 	return nil
 }
 
@@ -1739,26 +1682,30 @@ func (r *Literal) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) *
 }
 
 var (
-	_MulExpr_Rest_rep = grammar.MustRepeatOptions[MulTerm]("", "", "", "", "")
+	_Multiplicative_Rest_rep = grammar.MustRepeatOptions[MultiplicativeTerm]("1-", "", "", "", "")
 )
 
-// Parse implements grammar.Parser for MulExpr without reflection; it
+// Parse implements grammar.Parser for Multiplicative without reflection; it
 // does what grammar.Seq.Parse does.
-func (r *MulExpr) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err *grammar.ParseError) {
+func (r *Multiplicative) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err *grammar.ParseError) {
 	itemCount := 0
-	// First ConcatExpr
+	pending := s.TakePendingOr(8, true)
+	// First Expr
 	if s.Debug() {
 		s.Logf("  .First tok #%d", s.Save())
 	}
+	s.SetPrec(pending.Prec(0))
 	if fieldErr := grammar.ParseWithOptions(&r.First, s, grammar.TokenOptions{}); fieldErr != nil {
 		return err.Merge(fieldErr)
 	}
 	itemCount++
-	// Rest []MulTerm
+	// Rest []MultiplicativeTerm
 	if s.Debug() {
 		s.Logf("  .Rest tok #%d", s.Save())
 	}
-	if items, n, fieldErr, ok := grammar.ParseRepeated[MulTerm](s, grammar.TokenOptions{}, _MulExpr_Rest_rep); ok {
+	rep1 := _Multiplicative_Rest_rep
+	rep1.Prec = pending.Prec(1)
+	if items, n, fieldErr, ok := grammar.ParseRepeated[MultiplicativeTerm](s, grammar.TokenOptions{}, rep1); ok {
 		err = err.Merge(fieldErr)
 		r.Rest = items
 		itemCount += n
@@ -1766,22 +1713,22 @@ func (r *MulExpr) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (
 		return err.Merge(fieldErr)
 	}
 	if itemCount == 0 {
-		return grammar.EmptyMatchError(s, "MulExpr")
+		return grammar.EmptyMatchError(s, "Multiplicative")
 	}
 	return nil
 }
 
 // ParseRest parses the fields after the first, which is already set (the
 // left operand); the others are bound to the precedence level.
-func (r *MulExpr) ParseRest(s *grammar.ParserState, pending grammar.PendingPrec) (err *grammar.ParseError) {
+func (r *Multiplicative) ParseRest(s *grammar.ParserState, pending grammar.PendingPrec) (err *grammar.ParseError) {
 	itemCount := 1
-	// Rest []MulTerm
+	// Rest []MultiplicativeTerm
 	if s.Debug() {
 		s.Logf("  .Rest tok #%d", s.Save())
 	}
-	rep1 := _MulExpr_Rest_rep
+	rep1 := _Multiplicative_Rest_rep
 	rep1.Prec = pending.Prec(1)
-	if items, n, fieldErr, ok := grammar.ParseRepeated[MulTerm](s, grammar.TokenOptions{}, rep1); ok {
+	if items, n, fieldErr, ok := grammar.ParseRepeated[MultiplicativeTerm](s, grammar.TokenOptions{}, rep1); ok {
 		err = err.Merge(fieldErr)
 		r.Rest = items
 		itemCount += n
@@ -1793,31 +1740,34 @@ func (r *MulExpr) ParseRest(s *grammar.ParserState, pending grammar.PendingPrec)
 }
 
 var (
-	_MulTerm_Op_tok = grammar.TokenOptionsFromTag("op,*|op,/|op,%")
+	_MultiplicativeTerm_Op_tok = grammar.TokenOptionsFromTag("op,*|op,/|op,%")
 )
 
-// Parse implements grammar.Parser for MulTerm without reflection; it
+// Parse implements grammar.Parser for MultiplicativeTerm without reflection; it
 // does what grammar.Seq.Parse does.
-func (r *MulTerm) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err *grammar.ParseError) {
+func (r *MultiplicativeTerm) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err *grammar.ParseError) {
 	itemCount := 0
+	pending := s.TakePendingOr(8, true)
 	// Op Token
 	if s.Debug() {
 		s.Logf("  .Op tok #%d", s.Save())
 	}
-	if fieldErr := grammar.ParseWithOptions(&r.Op, s, _MulTerm_Op_tok); fieldErr != nil {
+	s.SetPrec(pending.Prec(0))
+	if fieldErr := grammar.ParseWithOptions(&r.Op, s, _MultiplicativeTerm_Op_tok); fieldErr != nil {
 		return err.Merge(fieldErr)
 	}
 	itemCount++
-	// Expr ConcatExpr
+	// X Expr
 	if s.Debug() {
-		s.Logf("  .Expr tok #%d", s.Save())
+		s.Logf("  .X tok #%d", s.Save())
 	}
-	if fieldErr := grammar.ParseWithOptions(&r.Expr, s, grammar.TokenOptions{}); fieldErr != nil {
+	s.SetPrec(pending.Prec(1))
+	if fieldErr := grammar.ParseWithOptions(&r.X, s, grammar.TokenOptions{}); fieldErr != nil {
 		return err.Merge(fieldErr)
 	}
 	itemCount++
 	if itemCount == 0 {
-		return grammar.EmptyMatchError(s, "MulTerm")
+		return grammar.EmptyMatchError(s, "MultiplicativeTerm")
 	}
 	return nil
 }
@@ -1830,105 +1780,60 @@ func (r *Name) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) *gra
 }
 
 var (
-	_Negation_Not_tok = grammar.TokenOptionsFromTag("kw,NOT")
+	_Not_Not_tok = grammar.TokenOptionsFromTag("kw,NOT")
 )
 
-// Parse implements grammar.Parser for Negation without reflection; it
+// Parse implements grammar.Parser for Not without reflection; it
 // does what grammar.Seq.Parse does.
-func (r *Negation) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err *grammar.ParseError) {
+func (r *Not) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err *grammar.ParseError) {
 	itemCount := 0
+	pending := s.TakePendingOr(3, true)
 	// Not grammar.Match
 	if s.Debug() {
 		s.Logf("  .Not tok #%d", s.Save())
 	}
-	if fieldErr := grammar.ParseWithOptions(&r.Not, s, _Negation_Not_tok); fieldErr != nil {
+	s.SetPrec(pending.Prec(0))
+	if fieldErr := grammar.ParseWithOptions(&r.Not, s, _Not_Not_tok); fieldErr != nil {
 		return err.Merge(fieldErr)
 	}
 	itemCount++
-	// Expr NotExpr
+	// X Expr
 	if s.Debug() {
-		s.Logf("  .Expr tok #%d", s.Save())
+		s.Logf("  .X tok #%d", s.Save())
 	}
-	if fieldErr := grammar.ParseWithOptions(&r.Expr, s, grammar.TokenOptions{}); fieldErr != nil {
+	s.SetPrec(pending.Prec(1))
+	if fieldErr := grammar.ParseWithOptions(&r.X, s, grammar.TokenOptions{}); fieldErr != nil {
 		return err.Merge(fieldErr)
 	}
 	itemCount++
 	if itemCount == 0 {
-		return grammar.EmptyMatchError(s, "Negation")
+		return grammar.EmptyMatchError(s, "Not")
 	}
 	return nil
 }
 
 var (
-	_NotExpr_lr        = grammar.LeftRecursionOf[NotExpr]()
-	_NotExpr_plain     = grammar.PlainAlternatives[NotExpr]()
-	_NotExpr_Not_first = grammar.FirstSetOf[Negation](grammar.TokenOptions{})
-	_NotExpr_Cmp_first = grammar.FirstSetOf[CmpExpr](grammar.TokenOptions{})
+	_NotNull_Not_tok  = grammar.TokenOptionsFromTag("kw,NOT")
+	_NotNull_Null_tok = grammar.TokenOptionsFromTag("kw,NULL")
 )
 
-// Parse implements grammar.Parser for NotExpr without reflection; it
-// does what grammar.OneOf.Parse does.
-func (r *NotExpr) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err *grammar.ParseError) {
-	if !_NotExpr_plain {
-		return r.parseGeneral(s)
-	}
-	// Not *Negation
-	if item, fieldErr := grammar.ParseOptional[Negation](s, grammar.TokenOptions{}, _NotExpr_Not_first); fieldErr == nil {
-		r.Not = item
-		return nil
-	} else {
-		err = err.Merge(fieldErr)
-	}
-	// Cmp *CmpExpr
-	if item, fieldErr := grammar.ParseOptional[CmpExpr](s, grammar.TokenOptions{}, _NotExpr_Cmp_first); fieldErr == nil {
-		r.Cmp = item
-		return nil
-	} else {
-		err = err.Merge(fieldErr)
-	}
-	return err
-}
-
-// parseGeneral is Parse for when an alternative is left recursive or has a
-// precedence.
-func (r *NotExpr) parseGeneral(s *grammar.ParserState) (err *grammar.ParseError) {
-	a := grammar.AlternativesOf[NotExpr](s)
-	defer a.Done()
-	// Not *Negation
-	if ok, tryErr := a.Try(_NotExpr_lr[0], _NotExpr_Not_first); !ok {
-		err = err.Merge(tryErr)
-	} else if item, fieldErr := grammar.ParseAlternative[Negation](s, &a, _NotExpr_lr[0], grammar.TokenOptions{}); fieldErr == nil {
-		r.Not = item
-		return nil
-	} else {
-		err = err.Merge(fieldErr)
-	}
-	// Cmp *CmpExpr
-	if ok, tryErr := a.Try(_NotExpr_lr[1], _NotExpr_Cmp_first); !ok {
-		err = err.Merge(tryErr)
-	} else if item, fieldErr := grammar.ParseAlternative[CmpExpr](s, &a, _NotExpr_lr[1], grammar.TokenOptions{}); fieldErr == nil {
-		r.Cmp = item
-		return nil
-	} else {
-		err = err.Merge(fieldErr)
-	}
-	return err
-}
-
-var (
-	_NotNullTerm_Not_tok  = grammar.TokenOptionsFromTag("kw,NOT")
-	_NotNullTerm_Null_tok = grammar.TokenOptionsFromTag("kw,NULL")
-)
-
-// Parse implements grammar.Parser for NotNullTerm without reflection; it
+// Parse implements grammar.Parser for NotNull without reflection; it
 // does what grammar.Seq.Parse does.
-func (r *NotNullTerm) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err *grammar.ParseError) {
+func (r *NotNull) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err *grammar.ParseError) {
 	itemCount := 0
+	// Lhs Expr
+	if s.Debug() {
+		s.Logf("  .Lhs tok #%d", s.Save())
+	}
+	if fieldErr := grammar.ParseWithOptions(&r.Lhs, s, grammar.TokenOptions{}); fieldErr != nil {
+		return err.Merge(fieldErr)
+	}
+	itemCount++
 	// Not grammar.Match
 	if s.Debug() {
 		s.Logf("  .Not tok #%d", s.Save())
 	}
-	if fieldErr := grammar.ParseWithOptions(&r.Not, s, _NotNullTerm_Not_tok); fieldErr != nil {
+	if fieldErr := grammar.ParseWithOptions(&r.Not, s, _NotNull_Not_tok); fieldErr != nil {
 		return err.Merge(fieldErr)
 	}
 	itemCount++
@@ -1936,13 +1841,144 @@ func (r *NotNullTerm) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOption
 	if s.Debug() {
 		s.Logf("  .Null tok #%d", s.Save())
 	}
-	if fieldErr := grammar.ParseWithOptions(&r.Null, s, _NotNullTerm_Null_tok); fieldErr != nil {
+	if fieldErr := grammar.ParseWithOptions(&r.Null, s, _NotNull_Null_tok); fieldErr != nil {
 		return err.Merge(fieldErr)
 	}
 	itemCount++
 	if itemCount == 0 {
-		return grammar.EmptyMatchError(s, "NotNullTerm")
+		return grammar.EmptyMatchError(s, "NotNull")
 	}
+	return nil
+}
+
+// ParseRest parses the fields after the first, which is already set (the
+// left operand); the others are bound to the precedence level.
+func (r *NotNull) ParseRest(s *grammar.ParserState, pending grammar.PendingPrec) (err *grammar.ParseError) {
+	itemCount := 1
+	// Not grammar.Match
+	if s.Debug() {
+		s.Logf("  .Not tok #%d", s.Save())
+	}
+	s.SetPrec(pending.Prec(1))
+	if fieldErr := grammar.ParseWithOptions(&r.Not, s, _NotNull_Not_tok); fieldErr != nil {
+		return err.Merge(fieldErr)
+	}
+	itemCount++
+	// Null grammar.Match
+	if s.Debug() {
+		s.Logf("  .Null tok #%d", s.Save())
+	}
+	s.SetPrec(pending.Prec(2))
+	if fieldErr := grammar.ParseWithOptions(&r.Null, s, _NotNull_Null_tok); fieldErr != nil {
+		return err.Merge(fieldErr)
+	}
+	itemCount++
+	_ = itemCount
+	return nil
+}
+
+var (
+	_NullTest_Op_tok = grammar.TokenOptionsFromTag("kw,ISNULL|kw,NOTNULL")
+)
+
+// Parse implements grammar.Parser for NullTest without reflection; it
+// does what grammar.Seq.Parse does.
+func (r *NullTest) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err *grammar.ParseError) {
+	itemCount := 0
+	// Lhs Expr
+	if s.Debug() {
+		s.Logf("  .Lhs tok #%d", s.Save())
+	}
+	if fieldErr := grammar.ParseWithOptions(&r.Lhs, s, grammar.TokenOptions{}); fieldErr != nil {
+		return err.Merge(fieldErr)
+	}
+	itemCount++
+	// Op Token
+	if s.Debug() {
+		s.Logf("  .Op tok #%d", s.Save())
+	}
+	if fieldErr := grammar.ParseWithOptions(&r.Op, s, _NullTest_Op_tok); fieldErr != nil {
+		return err.Merge(fieldErr)
+	}
+	itemCount++
+	if itemCount == 0 {
+		return grammar.EmptyMatchError(s, "NullTest")
+	}
+	return nil
+}
+
+// ParseRest parses the fields after the first, which is already set (the
+// left operand); the others are bound to the precedence level.
+func (r *NullTest) ParseRest(s *grammar.ParserState, pending grammar.PendingPrec) (err *grammar.ParseError) {
+	itemCount := 1
+	// Op Token
+	if s.Debug() {
+		s.Logf("  .Op tok #%d", s.Save())
+	}
+	s.SetPrec(pending.Prec(1))
+	if fieldErr := grammar.ParseWithOptions(&r.Op, s, _NullTest_Op_tok); fieldErr != nil {
+		return err.Merge(fieldErr)
+	}
+	itemCount++
+	_ = itemCount
+	return nil
+}
+
+var (
+	_Or_Rest_rep = grammar.MustRepeatOptions[OrTerm]("1-", "", "", "", "")
+)
+
+// Parse implements grammar.Parser for Or without reflection; it
+// does what grammar.Seq.Parse does.
+func (r *Or) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err *grammar.ParseError) {
+	itemCount := 0
+	pending := s.TakePendingOr(1, true)
+	// First Expr
+	if s.Debug() {
+		s.Logf("  .First tok #%d", s.Save())
+	}
+	s.SetPrec(pending.Prec(0))
+	if fieldErr := grammar.ParseWithOptions(&r.First, s, grammar.TokenOptions{}); fieldErr != nil {
+		return err.Merge(fieldErr)
+	}
+	itemCount++
+	// Rest []OrTerm
+	if s.Debug() {
+		s.Logf("  .Rest tok #%d", s.Save())
+	}
+	rep1 := _Or_Rest_rep
+	rep1.Prec = pending.Prec(1)
+	if items, n, fieldErr, ok := grammar.ParseRepeated[OrTerm](s, grammar.TokenOptions{}, rep1); ok {
+		err = err.Merge(fieldErr)
+		r.Rest = items
+		itemCount += n
+	} else {
+		return err.Merge(fieldErr)
+	}
+	if itemCount == 0 {
+		return grammar.EmptyMatchError(s, "Or")
+	}
+	return nil
+}
+
+// ParseRest parses the fields after the first, which is already set (the
+// left operand); the others are bound to the precedence level.
+func (r *Or) ParseRest(s *grammar.ParserState, pending grammar.PendingPrec) (err *grammar.ParseError) {
+	itemCount := 1
+	// Rest []OrTerm
+	if s.Debug() {
+		s.Logf("  .Rest tok #%d", s.Save())
+	}
+	rep1 := _Or_Rest_rep
+	rep1.Prec = pending.Prec(1)
+	if items, n, fieldErr, ok := grammar.ParseRepeated[OrTerm](s, grammar.TokenOptions{}, rep1); ok {
+		err = err.Merge(fieldErr)
+		r.Rest = items
+		itemCount += n
+	} else {
+		return err.Merge(fieldErr)
+	}
+	_ = itemCount
 	return nil
 }
 
@@ -1954,25 +1990,96 @@ var (
 // does what grammar.Seq.Parse does.
 func (r *OrTerm) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err *grammar.ParseError) {
 	itemCount := 0
+	pending := s.TakePendingOr(1, true)
 	// Or grammar.Match
 	if s.Debug() {
 		s.Logf("  .Or tok #%d", s.Save())
 	}
+	s.SetPrec(pending.Prec(0))
 	if fieldErr := grammar.ParseWithOptions(&r.Or, s, _OrTerm_Or_tok); fieldErr != nil {
 		return err.Merge(fieldErr)
 	}
 	itemCount++
-	// Expr AndExpr
+	// X Expr
 	if s.Debug() {
-		s.Logf("  .Expr tok #%d", s.Save())
+		s.Logf("  .X tok #%d", s.Save())
 	}
-	if fieldErr := grammar.ParseWithOptions(&r.Expr, s, grammar.TokenOptions{}); fieldErr != nil {
+	s.SetPrec(pending.Prec(1))
+	if fieldErr := grammar.ParseWithOptions(&r.X, s, grammar.TokenOptions{}); fieldErr != nil {
 		return err.Merge(fieldErr)
 	}
 	itemCount++
 	if itemCount == 0 {
 		return grammar.EmptyMatchError(s, "OrTerm")
 	}
+	return nil
+}
+
+var (
+	_Ordering_Op_tok = grammar.TokenOptionsFromTag("op,<|op,>|op,<=|op,>=")
+)
+
+// Parse implements grammar.Parser for Ordering without reflection; it
+// does what grammar.Seq.Parse does.
+func (r *Ordering) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err *grammar.ParseError) {
+	itemCount := 0
+	pending := s.TakePendingOr(5, true)
+	// Lhs Expr
+	if s.Debug() {
+		s.Logf("  .Lhs tok #%d", s.Save())
+	}
+	s.SetPrec(pending.Prec(0))
+	if fieldErr := grammar.ParseWithOptions(&r.Lhs, s, grammar.TokenOptions{}); fieldErr != nil {
+		return err.Merge(fieldErr)
+	}
+	itemCount++
+	// Op Token
+	if s.Debug() {
+		s.Logf("  .Op tok #%d", s.Save())
+	}
+	s.SetPrec(pending.Prec(1))
+	if fieldErr := grammar.ParseWithOptions(&r.Op, s, _Ordering_Op_tok); fieldErr != nil {
+		return err.Merge(fieldErr)
+	}
+	itemCount++
+	// Rhs Expr
+	if s.Debug() {
+		s.Logf("  .Rhs tok #%d", s.Save())
+	}
+	s.SetPrec(pending.Prec(2))
+	if fieldErr := grammar.ParseWithOptions(&r.Rhs, s, grammar.TokenOptions{}); fieldErr != nil {
+		return err.Merge(fieldErr)
+	}
+	itemCount++
+	if itemCount == 0 {
+		return grammar.EmptyMatchError(s, "Ordering")
+	}
+	return nil
+}
+
+// ParseRest parses the fields after the first, which is already set (the
+// left operand); the others are bound to the precedence level.
+func (r *Ordering) ParseRest(s *grammar.ParserState, pending grammar.PendingPrec) (err *grammar.ParseError) {
+	itemCount := 1
+	// Op Token
+	if s.Debug() {
+		s.Logf("  .Op tok #%d", s.Save())
+	}
+	s.SetPrec(pending.Prec(1))
+	if fieldErr := grammar.ParseWithOptions(&r.Op, s, _Ordering_Op_tok); fieldErr != nil {
+		return err.Merge(fieldErr)
+	}
+	itemCount++
+	// Rhs Expr
+	if s.Debug() {
+		s.Logf("  .Rhs tok #%d", s.Save())
+	}
+	s.SetPrec(pending.Prec(2))
+	if fieldErr := grammar.ParseWithOptions(&r.Rhs, s, grammar.TokenOptions{}); fieldErr != nil {
+		return err.Merge(fieldErr)
+	}
+	itemCount++
+	_ = itemCount
 	return nil
 }
 
@@ -2089,6 +2196,115 @@ func (r *ParenSelect) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOption
 }
 
 var (
+	_PatternMatch_Not_tok      = grammar.TokenOptionsFromTag("kw,NOT")
+	_PatternMatch_Not_first    = grammar.FirstSetOf[Token](_PatternMatch_Not_tok)
+	_PatternMatch_Op_tok       = grammar.TokenOptionsFromTag("kw,LIKE|kw,GLOB|kw,REGEXP|kw,MATCH")
+	_PatternMatch_Escape_first = grammar.FirstSetOf[EscapeClause](grammar.TokenOptions{})
+)
+
+// Parse implements grammar.Parser for PatternMatch without reflection; it
+// does what grammar.Seq.Parse does.
+func (r *PatternMatch) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err *grammar.ParseError) {
+	itemCount := 0
+	// Lhs Expr
+	if s.Debug() {
+		s.Logf("  .Lhs tok #%d", s.Save())
+	}
+	if fieldErr := grammar.ParseWithOptions(&r.Lhs, s, grammar.TokenOptions{}); fieldErr != nil {
+		return err.Merge(fieldErr)
+	}
+	itemCount++
+	// Not *Token
+	if s.Debug() {
+		s.Logf("  .Not tok #%d", s.Save())
+	}
+	if item, fieldErr := grammar.ParseOptional[Token](s, _PatternMatch_Not_tok, _PatternMatch_Not_first); fieldErr != nil {
+		err = err.Merge(fieldErr)
+	} else {
+		r.Not = item
+		itemCount++
+	}
+	// Op Token
+	if s.Debug() {
+		s.Logf("  .Op tok #%d", s.Save())
+	}
+	if fieldErr := grammar.ParseWithOptions(&r.Op, s, _PatternMatch_Op_tok); fieldErr != nil {
+		return err.Merge(fieldErr)
+	}
+	itemCount++
+	// Pattern Expr
+	if s.Debug() {
+		s.Logf("  .Pattern tok #%d", s.Save())
+	}
+	if fieldErr := grammar.ParseWithOptions(&r.Pattern, s, grammar.TokenOptions{}); fieldErr != nil {
+		return err.Merge(fieldErr)
+	}
+	itemCount++
+	// Escape *EscapeClause
+	if s.Debug() {
+		s.Logf("  .Escape tok #%d", s.Save())
+	}
+	if item, fieldErr := grammar.ParseOptional[EscapeClause](s, grammar.TokenOptions{}, _PatternMatch_Escape_first); fieldErr != nil {
+		err = err.Merge(fieldErr)
+	} else {
+		r.Escape = item
+		itemCount++
+	}
+	if itemCount == 0 {
+		return grammar.EmptyMatchError(s, "PatternMatch")
+	}
+	return nil
+}
+
+// ParseRest parses the fields after the first, which is already set (the
+// left operand); the others are bound to the precedence level.
+func (r *PatternMatch) ParseRest(s *grammar.ParserState, pending grammar.PendingPrec) (err *grammar.ParseError) {
+	itemCount := 1
+	// Not *Token
+	if s.Debug() {
+		s.Logf("  .Not tok #%d", s.Save())
+	}
+	s.SetPrec(pending.Prec(1))
+	if item, fieldErr := grammar.ParseOptional[Token](s, _PatternMatch_Not_tok, _PatternMatch_Not_first); fieldErr != nil {
+		err = err.Merge(fieldErr)
+	} else {
+		r.Not = item
+		itemCount++
+	}
+	// Op Token
+	if s.Debug() {
+		s.Logf("  .Op tok #%d", s.Save())
+	}
+	s.SetPrec(pending.Prec(2))
+	if fieldErr := grammar.ParseWithOptions(&r.Op, s, _PatternMatch_Op_tok); fieldErr != nil {
+		return err.Merge(fieldErr)
+	}
+	itemCount++
+	// Pattern Expr
+	if s.Debug() {
+		s.Logf("  .Pattern tok #%d", s.Save())
+	}
+	s.SetPrec(pending.Prec(3))
+	if fieldErr := grammar.ParseWithOptions(&r.Pattern, s, grammar.TokenOptions{}); fieldErr != nil {
+		return err.Merge(fieldErr)
+	}
+	itemCount++
+	// Escape *EscapeClause
+	if s.Debug() {
+		s.Logf("  .Escape tok #%d", s.Save())
+	}
+	s.SetPrec(pending.Prec(4))
+	if item, fieldErr := grammar.ParseOptional[EscapeClause](s, grammar.TokenOptions{}, _PatternMatch_Escape_first); fieldErr != nil {
+		err = err.Merge(fieldErr)
+	} else {
+		r.Escape = item
+		itemCount++
+	}
+	_ = itemCount
+	return nil
+}
+
+var (
 	_QualifiedName_Parts_rep = grammar.MustRepeatOptions[Name]("1-2", "op,.", "", "", "")
 )
 
@@ -2114,85 +2330,34 @@ func (r *QualifiedName) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOpti
 }
 
 var (
-	_RelExpr_Rest_rep = grammar.MustRepeatOptions[RelTerm]("", "", "", "", "")
+	_Sign_Op_tok = grammar.TokenOptionsFromTag("op,-|op,+")
 )
 
-// Parse implements grammar.Parser for RelExpr without reflection; it
+// Parse implements grammar.Parser for Sign without reflection; it
 // does what grammar.Seq.Parse does.
-func (r *RelExpr) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err *grammar.ParseError) {
+func (r *Sign) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err *grammar.ParseError) {
 	itemCount := 0
-	// First BitExpr
-	if s.Debug() {
-		s.Logf("  .First tok #%d", s.Save())
-	}
-	if fieldErr := grammar.ParseWithOptions(&r.First, s, grammar.TokenOptions{}); fieldErr != nil {
-		return err.Merge(fieldErr)
-	}
-	itemCount++
-	// Rest []RelTerm
-	if s.Debug() {
-		s.Logf("  .Rest tok #%d", s.Save())
-	}
-	if items, n, fieldErr, ok := grammar.ParseRepeated[RelTerm](s, grammar.TokenOptions{}, _RelExpr_Rest_rep); ok {
-		err = err.Merge(fieldErr)
-		r.Rest = items
-		itemCount += n
-	} else {
-		return err.Merge(fieldErr)
-	}
-	if itemCount == 0 {
-		return grammar.EmptyMatchError(s, "RelExpr")
-	}
-	return nil
-}
-
-// ParseRest parses the fields after the first, which is already set (the
-// left operand); the others are bound to the precedence level.
-func (r *RelExpr) ParseRest(s *grammar.ParserState, pending grammar.PendingPrec) (err *grammar.ParseError) {
-	itemCount := 1
-	// Rest []RelTerm
-	if s.Debug() {
-		s.Logf("  .Rest tok #%d", s.Save())
-	}
-	rep1 := _RelExpr_Rest_rep
-	rep1.Prec = pending.Prec(1)
-	if items, n, fieldErr, ok := grammar.ParseRepeated[RelTerm](s, grammar.TokenOptions{}, rep1); ok {
-		err = err.Merge(fieldErr)
-		r.Rest = items
-		itemCount += n
-	} else {
-		return err.Merge(fieldErr)
-	}
-	_ = itemCount
-	return nil
-}
-
-var (
-	_RelTerm_Op_tok = grammar.TokenOptionsFromTag("op,<|op,>|op,<=|op,>=")
-)
-
-// Parse implements grammar.Parser for RelTerm without reflection; it
-// does what grammar.Seq.Parse does.
-func (r *RelTerm) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err *grammar.ParseError) {
-	itemCount := 0
+	pending := s.TakePendingOr(10, true)
 	// Op Token
 	if s.Debug() {
 		s.Logf("  .Op tok #%d", s.Save())
 	}
-	if fieldErr := grammar.ParseWithOptions(&r.Op, s, _RelTerm_Op_tok); fieldErr != nil {
+	s.SetPrec(pending.Prec(0))
+	if fieldErr := grammar.ParseWithOptions(&r.Op, s, _Sign_Op_tok); fieldErr != nil {
 		return err.Merge(fieldErr)
 	}
 	itemCount++
-	// Expr BitExpr
+	// X Expr
 	if s.Debug() {
-		s.Logf("  .Expr tok #%d", s.Save())
+		s.Logf("  .X tok #%d", s.Save())
 	}
-	if fieldErr := grammar.ParseWithOptions(&r.Expr, s, grammar.TokenOptions{}); fieldErr != nil {
+	s.SetPrec(pending.Prec(1))
+	if fieldErr := grammar.ParseWithOptions(&r.X, s, grammar.TokenOptions{}); fieldErr != nil {
 		return err.Merge(fieldErr)
 	}
 	itemCount++
 	if itemCount == 0 {
-		return grammar.EmptyMatchError(s, "RelTerm")
+		return grammar.EmptyMatchError(s, "Sign")
 	}
 	return nil
 }
@@ -2306,92 +2471,6 @@ func (r *TypeSize) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) 
 	itemCount++
 	if itemCount == 0 {
 		return grammar.EmptyMatchError(s, "TypeSize")
-	}
-	return nil
-}
-
-var (
-	_UnaryExpr_lr            = grammar.LeftRecursionOf[UnaryExpr]()
-	_UnaryExpr_plain         = grammar.PlainAlternatives[UnaryExpr]()
-	_UnaryExpr_Op_first      = grammar.FirstSetOf[UnaryOp](grammar.TokenOptions{})
-	_UnaryExpr_Collate_first = grammar.FirstSetOf[CollateExpr](grammar.TokenOptions{})
-)
-
-// Parse implements grammar.Parser for UnaryExpr without reflection; it
-// does what grammar.OneOf.Parse does.
-func (r *UnaryExpr) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err *grammar.ParseError) {
-	if !_UnaryExpr_plain {
-		return r.parseGeneral(s)
-	}
-	// Op *UnaryOp
-	if item, fieldErr := grammar.ParseOptional[UnaryOp](s, grammar.TokenOptions{}, _UnaryExpr_Op_first); fieldErr == nil {
-		r.Op = item
-		return nil
-	} else {
-		err = err.Merge(fieldErr)
-	}
-	// Collate *CollateExpr
-	if item, fieldErr := grammar.ParseOptional[CollateExpr](s, grammar.TokenOptions{}, _UnaryExpr_Collate_first); fieldErr == nil {
-		r.Collate = item
-		return nil
-	} else {
-		err = err.Merge(fieldErr)
-	}
-	return err
-}
-
-// parseGeneral is Parse for when an alternative is left recursive or has a
-// precedence.
-func (r *UnaryExpr) parseGeneral(s *grammar.ParserState) (err *grammar.ParseError) {
-	a := grammar.AlternativesOf[UnaryExpr](s)
-	defer a.Done()
-	// Op *UnaryOp
-	if ok, tryErr := a.Try(_UnaryExpr_lr[0], _UnaryExpr_Op_first); !ok {
-		err = err.Merge(tryErr)
-	} else if item, fieldErr := grammar.ParseAlternative[UnaryOp](s, &a, _UnaryExpr_lr[0], grammar.TokenOptions{}); fieldErr == nil {
-		r.Op = item
-		return nil
-	} else {
-		err = err.Merge(fieldErr)
-	}
-	// Collate *CollateExpr
-	if ok, tryErr := a.Try(_UnaryExpr_lr[1], _UnaryExpr_Collate_first); !ok {
-		err = err.Merge(tryErr)
-	} else if item, fieldErr := grammar.ParseAlternative[CollateExpr](s, &a, _UnaryExpr_lr[1], grammar.TokenOptions{}); fieldErr == nil {
-		r.Collate = item
-		return nil
-	} else {
-		err = err.Merge(fieldErr)
-	}
-	return err
-}
-
-var (
-	_UnaryOp_Op_tok = grammar.TokenOptionsFromTag("op,-|op,+|op,~")
-)
-
-// Parse implements grammar.Parser for UnaryOp without reflection; it
-// does what grammar.Seq.Parse does.
-func (r *UnaryOp) Parse(_ any, s *grammar.ParserState, _ grammar.TokenOptions) (err *grammar.ParseError) {
-	itemCount := 0
-	// Op Token
-	if s.Debug() {
-		s.Logf("  .Op tok #%d", s.Save())
-	}
-	if fieldErr := grammar.ParseWithOptions(&r.Op, s, _UnaryOp_Op_tok); fieldErr != nil {
-		return err.Merge(fieldErr)
-	}
-	itemCount++
-	// Expr UnaryExpr
-	if s.Debug() {
-		s.Logf("  .Expr tok #%d", s.Save())
-	}
-	if fieldErr := grammar.ParseWithOptions(&r.Expr, s, grammar.TokenOptions{}); fieldErr != nil {
-		return err.Merge(fieldErr)
-	}
-	itemCount++
-	if itemCount == 0 {
-		return grammar.EmptyMatchError(s, "UnaryOp")
 	}
 	return nil
 }
