@@ -54,6 +54,19 @@ func (f FirstSet) check(s *ParserState) *ParseError {
 	return s.recordFailure(pos, tok, f.opts, nil)
 }
 
+// checkAt is like check for the token tok at position pos, which the stream
+// is not at: used for the continuation of a left-recursive alternative, which
+// must start with the token after the seed.
+func (f FirstSet) checkAt(s *ParserState, pos int, tok Token) *ParseError {
+	if f.any || f.nullable || !firstSetsEnabled {
+		return nil
+	}
+	if matchesAny(f.opts, tok) || matchesAny(f.drop, tok) {
+		return nil
+	}
+	return s.recordFailure(pos, tok, f.opts, nil)
+}
+
 func matchesAny(opts []TokenParseOptions, tok Token) bool {
 	for _, o := range opts {
 		if o.matches(tok) {
@@ -161,13 +174,16 @@ func alternativeFirsts(o alternatives) []FirstSet {
 	return firsts
 }
 
-// alternativeTypesOf returns the alternatives of t if it is a OneOfN rule or
-// embeds one.
+// alternativeTypesOf returns the alternatives of t if it is a OneOfN or Sum
+// rule or embeds one.
 func alternativeTypesOf(t reflect.Type) ([]reflect.Type, bool) {
-	if t.Kind() != reflect.Struct || !reflect.PointerTo(t).Implements(alternativesType) {
+	if t.Kind() != reflect.Struct {
 		return nil, false
 	}
-	return reflect.New(t).Interface().(alternatives).alternativeTypes(), true
+	if reflect.PointerTo(t).Implements(alternativesType) {
+		return reflect.New(t).Interface().(alternatives).alternativeTypes(), true
+	}
+	return nil, false
 }
 
 // A ruleBuilder builds the rule definitions and first sets of all the types
@@ -218,10 +234,13 @@ func (b *ruleBuilder) computeFirst(t reflect.Type, firstOf func(reflect.Type) Fi
 	case simpleTokenType, matchType, tokType, emptyType:
 		return nullableFirst // with no options to match, these consume nothing
 	}
-	if alts, ok := alternativeTypesOf(t); ok {
+	if alts, opts, ok := sumAlternatives(t); ok {
 		var res FirstSet
-		for _, alt := range alts {
-			res = res.union(firstOf(alt))
+		if d, ok := reflect.New(t).Interface().(sumDeclarer); ok {
+			res.drop = d.sumDecl().DropOptions.TokenParseOptions
+		}
+		for i, alt := range alts {
+			res = res.union(firstOfField(alt, opts[i], firstOf))
 		}
 		return res
 	}
@@ -236,10 +255,16 @@ func (b *ruleBuilder) computeFirst(t reflect.Type, firstOf func(reflect.Type) Fi
 		}
 		return res
 	}
-	// A Seq (or Tok rule): the fields that may consume nothing let the next
-	// one start the rule too; a lookahead (no-consume) field constrains the
-	// first token without consuming it, so it ends the walk as well.
-	for _, f := range def.Fields {
+	return seqFirst(def, 0, firstOf)
+}
+
+// seqFirst is the first set of the fields of a Seq (or Tok rule) from index
+// from: the fields that may consume nothing let the next one start the rule
+// too; a lookahead (no-consume) field constrains the first token without
+// consuming it, so it ends the walk as well.
+func seqFirst(def *RuleDef, from int, firstOf func(reflect.Type) FirstSet) FirstSet {
+	res := FirstSet{drop: def.DropOptions.TokenParseOptions}
+	for _, f := range def.Fields[from:] {
 		first := firstOfField(f.BaseType, f.TokenOptions, firstOf)
 		res = res.union(FirstSet{any: first.any, opts: first.opts, drop: first.drop})
 		switch {
@@ -276,6 +301,7 @@ func (b *ruleBuilder) build(root reflect.Type) {
 		}
 	}
 	visit(root)
+	b.def(root) // so that it is cached even if it is not a struct rule
 	lookup := func(t reflect.Type) FirstSet { return env[t] }
 	for changed := true; changed; {
 		changed = false
@@ -295,7 +321,7 @@ func (b *ruleBuilder) build(root reflect.Type) {
 		env[t] = f
 		b.firsts[t] = f
 	}
-	for _, d := range b.defs {
+	for t, d := range b.defs {
 		if d.err != nil {
 			continue
 		}
@@ -303,11 +329,109 @@ func (b *ruleBuilder) build(root reflect.Type) {
 		for i, f := range d.ruleDef.Fields {
 			d.ruleDef.firsts[i] = firstOfField(f.BaseType, f.TokenOptions, lookup)
 		}
+		if d.ruleDef.OneOf {
+			b.leftRecursion(t, d.ruleDef, lookup)
+		}
 	}
 	// First sets before definitions: a definition found in the cache has its
 	// type's first set there too.
 	firstSets.storeAll(b.firsts)
 	ruleDefs.storeAll(b.defs)
+}
+
+type leftRecKind uint8
+
+const (
+	notLeftRec      leftRecKind = iota
+	directLeftRec               // a Seq rule whose first field is the OneOf rule
+	indirectLeftRec             // reaches the OneOf rule first through other rules
+)
+
+// LeftRecInfo says whether an alternative of a OneOf rule is left recursive
+// (may parse the OneOf rule itself first, at the same position) and, for a
+// Seq alternative that starts with it, what may follow that first field.
+type LeftRecInfo struct {
+	kind    leftRecKind
+	cont    FirstSet
+	prec    int          // precedence of the alternative (from its rule's prec tag)
+	hasPrec bool         // the alternative has a precedence
+	family  reflect.Type // the type of its left operand, if direct
+}
+
+// Level returns the precedence of the alternative (0 if it has none).
+func (lr LeftRecInfo) Level() int { return lr.prec }
+
+// leftRecursion classifies the alternatives of the OneOf rule t.
+func (b *ruleBuilder) leftRecursion(t reflect.Type, def *RuleDef, lookup func(reflect.Type) FirstSet) {
+	def.leftRec = make([]LeftRecInfo, len(def.Fields))
+	for i, f := range def.Fields {
+		def.leftRec[i] = b.classify(t, f.BaseType, f.Pointer, lookup)
+		if !def.leftRec[i].hasPrec && def.HasPrec {
+			def.leftRec[i].prec, def.leftRec[i].hasPrec = def.Prec, true
+		}
+	}
+}
+
+// classify returns the left recursion info of alt as an alternative of the
+// OneOf (or Sum) rule t, with the precedence of alt's own rule.
+func (b *ruleBuilder) classify(t, alt reflect.Type, pointer bool, lookup func(reflect.Type) FirstSet) LeftRecInfo {
+	var info LeftRecInfo
+	altDef, err := b.def(alt)
+	if err == nil {
+		info.prec, info.hasPrec = altDef.Prec, altDef.HasPrec
+	}
+	if !b.reachesFirst(alt, t, lookup, map[reflect.Type]bool{}) {
+		return info
+	}
+	info.kind = indirectLeftRec
+	if err == nil && pointer && !altDef.OneOf && len(altDef.Fields) > 0 {
+		if first := altDef.Fields[0]; first.BaseType == t && !first.Pointer && !first.Array {
+			info.kind, info.cont, info.family = directLeftRec, seqFirst(altDef, 1, lookup), t
+		}
+	}
+	return info
+}
+
+// reachesFirst reports whether parsing u may parse t first, at the same
+// position.
+func (b *ruleBuilder) reachesFirst(u, t reflect.Type, lookup func(reflect.Type) FirstSet, seen map[reflect.Type]bool) bool {
+	if u == t {
+		return true
+	}
+	if seen[u] {
+		return false
+	}
+	seen[u] = true
+	for _, c := range b.leftmost(u, lookup) {
+		if b.reachesFirst(c, t, lookup, seen) {
+			return true
+		}
+	}
+	return false
+}
+
+// leftmost returns the rule types that u may parse first.
+func (b *ruleBuilder) leftmost(u reflect.Type, lookup func(reflect.Type) FirstSet) []reflect.Type {
+	if alts, ok := alternativeTypesOf(u); ok {
+		return alts
+	}
+	def, err := b.def(u)
+	if err != nil {
+		return nil // a token or custom rule
+	}
+	var res []reflect.Type
+	for _, f := range def.Fields {
+		res = append(res, f.BaseType)
+		if def.OneOf {
+			continue
+		}
+		first := firstOfField(f.BaseType, f.TokenOptions, lookup)
+		if f.Pointer || f.Array && f.Min == 0 || first.nullable {
+			continue
+		}
+		break
+	}
+	return res
 }
 
 // atomicMap is a map that is safe for concurrent use and as cheap to read as
