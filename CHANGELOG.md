@@ -32,6 +32,9 @@
   other (`R = X | Name`, `X = X "*" Name | R ":" Name | Name`), could leave
   a stale memo entry behind and mis-parse (`a * b` parsed as `a`); the
   dependent rule now drops its entry when it is done.
+- `Parse` with the `Exhaust` option crashed when the root rule embedded a
+  `OneOfN` rule (a type with no rule definition to look the drop options up
+  in).
 
 ### Performance
 
