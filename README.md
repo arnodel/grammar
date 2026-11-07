@@ -83,6 +83,7 @@ it matches the token given by its `tok` tag and takes no space in the result.
 | `trail:"required"` | a slice field with `sep` | every item must be followed by the separator (`1; 2;`) |
 | `size:"n"`, `size:"min-max"`, `size:"min-"`, `size:"-max"` | a slice field | bounds on the number of items |
 | `drop:"type"` | the `Seq` or `OneOf` field | tokens of this type are skipped before each field, item and separator of the rule (e.g. whitespace or comments that the tokeniser keeps) |
+| `prec:"n"` | the `Seq` field of an operator rule, or the `OneOf` field of a group of them | the precedence of the operator, see [Operator precedence](#operator-precedence) |
 
 A slice with no `size` matches zero or more items.  A separator is matched
 only between items unless a `trail` mode says otherwise.
@@ -118,6 +119,25 @@ case *List:
 The type parameters are unconstrained (`any`) because Go cannot express
 "pointer to T implements Parser" without doubling them; an argument that is
 not a rule type is reported when the rule is first parsed.
+
+`grammar.Sum[T]` gives the same compact value for a `OneOf` rule type `T`,
+which then serves only as the declaration of the alternatives, with their
+tags, in the usual form.  This suits a choice with many alternatives, or
+one you want to group:
+
+```golang
+type Expr struct {
+    grammar.Sum[struct {
+        grammar.OneOf
+        Sum  *Sum
+        Neg  *Neg
+        Atom *Atom
+    }]
+}
+```
+
+`expr.Value` is then a `*Sum`, a `*Neg` or an `*Atom`.  The declaration may
+be a named type too, if the wide form is wanted somewhere.
 
 ## Tokens
 
@@ -289,6 +309,76 @@ type Num struct {
 
 Parsing `1 + 2 + 3` gives `Sum{Sum{1, 2}, 3}`.  Indirect left recursion
 (through several rules) works too.
+
+### Operator precedence
+
+With several operators, left recursion alone gives every operator the same
+precedence.  A `prec` tag on the `Seq` field of an operator rule gives it a
+level: among the alternatives of a `OneOf` (or `Sum`), a rule with a level
+only applies when the level in effect is lower, and its operands after the
+first are parsed under its own level.  Higher binds tighter.
+
+```golang
+type Expr struct {
+    grammar.Sum[struct {
+        grammar.OneOf
+        Add  *Add
+        Mul  *Mul
+        Neg  *Neg
+        Atom *Atom
+    }]
+}
+
+// Add ::= Expr ("+" | "-") Expr
+type Add struct {
+    grammar.Seq `prec:"1"`
+    Lhs Expr
+    Op  grammar.Tok `tok:"op,+|op,-"`
+    Rhs Expr
+}
+
+// Mul ::= Expr ("*" | "/") Expr
+type Mul struct {
+    grammar.Seq `prec:"2"`
+    Lhs Expr
+    Op  grammar.Tok `tok:"op,*|op,/"`
+    Rhs Expr
+}
+
+// Neg ::= "-" Expr, a prefix operator
+type Neg struct {
+    grammar.Seq `prec:"3"`
+    Minus grammar.Match `tok:"op,-"`
+    X     Expr
+}
+
+type Atom struct {
+    grammar.OneOf
+    Num   *Num
+    Paren *Paren // "(" Expr ")"
+}
+```
+
+`1 + 2 * 3` parses as `Add{1, Mul{2, 3}}`: the `Rhs` of `Add` is parsed under
+level 1, where `Mul` (level 2) applies but another `Add` does not, which also
+makes the operators left associative.  `-1 * 2` is `Mul{Neg{1}, 2}`: a prefix
+operator is not left recursive, so its level only binds its operand.  The
+level is consumed by the first rule entered, so the expression inside
+`Paren` starts afresh, as do function arguments or anything else bracketed.
+
+A level may be given to a group of operators instead of each of them, with a
+`prec` tag on the `OneOf` field of the group's declaration (or on an
+embedded `OneOfN`), and a group member may still state its own.  A flat list
+is written as usual, `First Expr` then `Rest []Term`, with the level on the
+term rule too since it binds the term's operand.  A level set by an operator
+of `Expr` only constrains `Expr`: a language with separate value and type
+expressions can give each its own table.
+
+An operator rule and the sum it belongs to are parsed by precedence climbing
+rather than by seed growing, so this is also the fast way to write
+expressions.  See [examples/sql](./examples/sql/expr.go) for a full
+expression grammar in this style, with eleven levels, prefix and postfix
+operators and mixfix predicates like `BETWEEN`.
 
 ## Custom rules
 

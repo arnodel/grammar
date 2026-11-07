@@ -2,6 +2,32 @@
 
 ## Unreleased
 
+### Added
+
+- Operator precedence.  A `prec` tag on the `Seq` field of an operator rule
+  gives it a level; among the alternatives of a `OneOf` or `Sum`, such a
+  rule only applies when the level in effect is lower, and its operands
+  after the first are parsed under its own level.  A `prec` tag on a
+  `OneOf` field (or an embedded `OneOfN` or `Sum`) is the default level of
+  its alternatives.  Levels are per sum: a level set by an operator of one
+  expression grammar does not constrain another.  Left-recursive
+  alternatives are parsed by precedence climbing when they all start with
+  the rule itself, with a dispatch table built from their first sets, and by
+  seed growing otherwise, which now skips the alternatives whose
+  continuation cannot start with the token after the seed.
+- `Sum[T]`: the memory-efficient form of a `OneOf` rule type `T`, whose
+  value is just a pointer to the alternative that matched, as with the
+  `OneOfN` rules.  `T` declares the alternatives with their tags.  Nested
+  sums are flattened for parsing and wrapped back in the tree.
+- Generated code: `ParseRest` methods, precedence loops for `OneOf` rules
+  whose left-recursive alternatives are in the same file, and the plain code
+  as before for rules with neither left recursion nor precedence.
+
+### Fixed
+
+- A repetition whose item matched without consuming anything (an untagged
+  token field, for instance) looped forever; it stops after that item.
+
 ### Performance
 
 - A rule is memoised only once it is parsed a second time at the same
